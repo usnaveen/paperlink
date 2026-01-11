@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 
-type ScanStatus = 'idle' | 'initializing' | 'scanning' | 'processing' | 'detected' | 'redirecting' | 'error';
+type ScanStatus = 'idle' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'error';
 
 export default function ScanPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -11,22 +11,16 @@ export default function ScanPage() {
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [statusText, setStatusText] = useState('');
     const [detectedCode, setDetectedCode] = useState('');
-    const [detectedUrl, setDetectedUrl] = useState('');
     const [manualCode, setManualCode] = useState('');
     const [cameraError, setCameraError] = useState('');
+    const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
     const streamRef = useRef<MediaStream | null>(null);
-    const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const workerRef = useRef<any>(null);
-    const isProcessingRef = useRef(false);
 
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
 
     const stopCamera = () => {
-        if (scanIntervalRef.current) {
-            clearInterval(scanIntervalRef.current);
-            scanIntervalRef.current = null;
-        }
         if (streamRef.current) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
@@ -42,12 +36,8 @@ export default function ScanPage() {
         };
     }, []);
 
+    // Handle detected code - INSTANT redirect
     const handleCodeDetected = async (code: string) => {
-        if (scanIntervalRef.current) {
-            clearInterval(scanIntervalRef.current);
-            scanIntervalRef.current = null;
-        }
-
         setStatus('detected');
         setDetectedCode(code);
         setStatusText(`Found: ${code}`);
@@ -61,31 +51,27 @@ export default function ScanPage() {
             const data = await response.json();
 
             if (response.ok && data.url) {
-                setDetectedUrl(data.url);
-                setStatus('redirecting');
-                setStatusText('Opening link in 2 seconds...');
-
-                setTimeout(() => {
-                    window.location.href = data.url;
-                }, 2000);
+                // INSTANT redirect - no delay
+                window.location.href = data.url;
             } else {
                 setStatusText(`Code "${code}" not found. Try again.`);
-                setStatus('scanning');
-                setTimeout(() => startScanning(), 1000);
+                setStatus('camera-ready');
+                setCapturedImage(null);
             }
         } catch (err) {
             console.error('Resolve error:', err);
             setStatusText('Error looking up code. Try again.');
-            setStatus('scanning');
-            setTimeout(() => startScanning(), 1000);
+            setStatus('camera-ready');
+            setCapturedImage(null);
         }
     };
 
-    const captureAndScan = async () => {
+    // Capture photo and crop to scanning rectangle
+    const captureAndProcess = async () => {
         if (!videoRef.current || !canvasRef.current || !workerRef.current) return;
-        if (isProcessingRef.current) return;
 
-        isProcessingRef.current = true;
+        setStatus('capturing');
+        setStatusText('Capturing...');
 
         try {
             const video = videoRef.current;
@@ -94,54 +80,69 @@ export default function ScanPage() {
             if (!ctx) return;
 
             if (video.videoWidth === 0 || video.videoHeight === 0) {
-                isProcessingRef.current = false;
+                setStatusText('Camera not ready. Try again.');
+                setStatus('camera-ready');
                 return;
             }
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+            // Calculate crop region (matching the scan overlay: 80% width, 25% height, centered)
+            const overlayWidthPercent = 0.80;
+            const overlayHeightPercent = 0.25;
 
-            const imageData = canvas.toDataURL('image/png');
+            const cropWidth = video.videoWidth * overlayWidthPercent;
+            const cropHeight = video.videoHeight * overlayHeightPercent;
+            const cropX = (video.videoWidth - cropWidth) / 2;
+            const cropY = (video.videoHeight - cropHeight) / 2;
 
+            // Set canvas to cropped dimensions
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+
+            // Draw only the cropped region
+            ctx.drawImage(
+                video,
+                cropX, cropY, cropWidth, cropHeight,  // Source (crop area)
+                0, 0, cropWidth, cropHeight            // Destination (full canvas)
+            );
+
+            const croppedImage = canvas.toDataURL('image/png');
+            setCapturedImage(croppedImage);
+
+            // Process the cropped image
             setStatus('processing');
             setStatusText('Analyzing...');
 
-            const result = await workerRef.current.recognize(imageData);
+            const result = await workerRef.current.recognize(croppedImage);
             const text = result.data.text.toUpperCase();
+
+            console.log('OCR Result:', text);
 
             const matches = text.match(codePattern);
 
             if (matches && matches.length > 0) {
                 const foundCode = matches[0].toUpperCase();
-                isProcessingRef.current = false;
                 await handleCodeDetected(foundCode);
-                return;
+            } else {
+                setStatusText('No code found. Position the code in the rectangle and try again.');
+                setStatus('camera-ready');
+                // Keep the captured image visible for a moment
+                setTimeout(() => setCapturedImage(null), 2000);
             }
-
-            setStatus('scanning');
-            setStatusText('Scanning... Point at a PL-XXX-XXX code');
         } catch (err) {
-            console.error('OCR error:', err);
-            setStatus('scanning');
-            setStatusText('Scanning...');
+            console.error('Capture error:', err);
+            setStatusText('Error processing image. Try again.');
+            setStatus('camera-ready');
+            setCapturedImage(null);
         }
-
-        isProcessingRef.current = false;
     };
 
-    const startScanning = () => {
-        if (scanIntervalRef.current) {
-            clearInterval(scanIntervalRef.current);
-        }
-        scanIntervalRef.current = setInterval(captureAndScan, 2000);
-    };
-
+    // Start camera
     const startCamera = async () => {
         try {
-            setStatus('initializing');
+            setStatus('idle');
             setStatusText('Requesting camera access...');
             setCameraError('');
+            setCapturedImage(null);
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera not supported on this device/browser');
@@ -163,6 +164,7 @@ export default function ScanPage() {
                 await videoRef.current.play();
             }
 
+            // Initialize OCR worker
             setStatusText('Loading OCR engine...');
 
             const Tesseract = (await import('tesseract.js')).default;
@@ -180,10 +182,8 @@ export default function ScanPage() {
 
             workerRef.current = worker;
 
-            setStatus('scanning');
-            setStatusText('Point camera at handwritten code');
-
-            startScanning();
+            setStatus('camera-ready');
+            setStatusText('Position code in the rectangle, then tap Capture');
         } catch (err) {
             console.error('Camera error:', err);
             const errorMessage = err instanceof Error ? err.message : 'Camera error';
@@ -199,6 +199,7 @@ export default function ScanPage() {
         }
     };
 
+    // Handle manual code entry
     const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!manualCode.trim()) return;
@@ -207,19 +208,16 @@ export default function ScanPage() {
         await handleCodeDetected(code);
     };
 
-    const cancelRedirect = () => {
-        setStatus('scanning');
-        setDetectedCode('');
-        setDetectedUrl('');
-        setStatusText('Scanning...');
-        startScanning();
+    // Retake photo
+    const retakePhoto = () => {
+        setCapturedImage(null);
+        setStatus('camera-ready');
+        setStatusText('Position code in the rectangle, then tap Capture');
     };
 
     return (
         <div className="container">
-            {/* Main Winamp Window */}
             <div className="winamp-window">
-                {/* Title Bar - Metallic Header */}
                 <div className="winamp-titlebar">
                     <span className="winamp-titlebar-text">PAPERLINK SCANNER</span>
                     <div className="winamp-titlebar-buttons">
@@ -230,14 +228,12 @@ export default function ScanPage() {
                 </div>
 
                 <div className="winamp-content">
-                    {/* LCD Display Header */}
                     <div className="lcd-display">
                         <div className="lcd-text lcd-text-medium" style={{ textAlign: 'center' }}>
                             SCAN YOUR HANDWRITTEN CODES
                         </div>
                     </div>
 
-                    {/* Navigation Tabs */}
                     <nav className="nav-tabs">
                         <Link href="/" className="nav-tab">
                             ✍️ Write
@@ -249,7 +245,7 @@ export default function ScanPage() {
 
                     <main className="scanner-container">
                         {/* Idle State */}
-                        {status === 'idle' && (
+                        {status === 'idle' && !streamRef.current && (
                             <div className="card text-center">
                                 <h2 className="card-title">▶ Camera Scanner</h2>
                                 <p style={{
@@ -259,7 +255,7 @@ export default function ScanPage() {
                                     color: 'var(--lcd-text)',
                                     textShadow: '0 0 8px var(--lcd-text)'
                                 }}>
-                                    Scan handwritten PaperLink codes from your notes
+                                    Capture a photo of your handwritten PaperLink code
                                 </p>
                                 <button onClick={startCamera} className="btn btn-primary">
                                     📷 Start Camera
@@ -285,43 +281,69 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Active Camera View */}
-                        {(status !== 'idle' && !cameraError) && (
+                        {/* Camera View or Captured Image */}
+                        {(status !== 'idle' || streamRef.current) && !cameraError && (
                             <>
                                 <div className="video-wrapper">
-                                    <video ref={videoRef} playsInline muted autoPlay />
-                                    <div className="scan-overlay" />
+                                    {/* Show captured image when available, otherwise show video */}
+                                    {capturedImage ? (
+                                        <img
+                                            src={capturedImage}
+                                            alt="Captured"
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                background: '#000'
+                                            }}
+                                        />
+                                    ) : (
+                                        <>
+                                            <video ref={videoRef} playsInline muted autoPlay />
+                                            <div className="scan-overlay" />
+                                        </>
+                                    )}
                                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                                 </div>
 
-                                <div className={`scan-status ${status === 'detected' || status === 'redirecting' ? 'detected' : ''}`}>
-                                    {status === 'initializing' && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
-                                            <span className="spinner"></span>
+                                {/* Status Display */}
+                                <div className={`scan-status ${status === 'detected' ? 'detected' : ''}`}>
+                                    {status === 'camera-ready' && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
                                             <span>{statusText}</span>
-                                        </div>
-                                    )}
-                                    {status === 'scanning' && statusText}
-                                    {status === 'processing' && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
-                                            <span className="spinner"></span>
-                                            <span>{statusText}</span>
-                                        </div>
-                                    )}
-                                    {(status === 'detected' || status === 'redirecting') && (
-                                        <div>
-                                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
-                                            {detectedUrl && (
-                                                <div style={{ fontSize: '11px', color: 'var(--light-gray)', marginBottom: '10px' }}>
-                                                    → {detectedUrl.length > 40 ? detectedUrl.substring(0, 40) + '...' : detectedUrl}
-                                                </div>
-                                            )}
-                                            <button onClick={cancelRedirect} className="btn btn-secondary">
-                                                ✕ Cancel
+                                            <button
+                                                onClick={captureAndProcess}
+                                                className="btn btn-primary"
+                                                style={{ marginTop: '8px' }}
+                                            >
+                                                📸 Capture & Scan
                                             </button>
                                         </div>
                                     )}
+                                    {(status === 'capturing' || status === 'processing') && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
+                                            <span className="spinner"></span>
+                                            <span>{statusText}</span>
+                                        </div>
+                                    )}
+                                    {status === 'detected' && (
+                                        <div>
+                                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
+                                            <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>
+                                                Redirecting...
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
+
+                                {/* Retake button when image is captured but no code found */}
+                                {capturedImage && status === 'camera-ready' && (
+                                    <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                                        <button onClick={retakePhoto} className="btn btn-secondary">
+                                            ↻ Retake Photo
+                                        </button>
+                                    </div>
+                                )}
                             </>
                         )}
 
