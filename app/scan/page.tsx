@@ -55,7 +55,7 @@ export default function ScanPage() {
 
         setStatus('detected');
         setDetectedCode(code);
-        setStatusText(`Found: ${code}`);
+        setStatusText(`FOUND: ${code}`);
 
         // Haptic feedback
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -70,20 +70,20 @@ export default function ScanPage() {
             if (response.ok && data.url) {
                 setDetectedUrl(data.url);
                 setStatus('redirecting');
-                setStatusText('Opening link in 2 seconds...');
+                setStatusText('OPENING LINK IN 2 SECONDS...');
 
                 // Auto-redirect after 2 seconds
                 setTimeout(() => {
                     window.location.href = data.url;
                 }, 2000);
             } else {
-                setStatusText(`Code "${code}" not found. Try again.`);
+                setStatusText(`CODE "${code}" NOT FOUND. TRY AGAIN.`);
                 setStatus('scanning');
                 setTimeout(() => startScanning(), 1000);
             }
         } catch (err) {
             console.error('Resolve error:', err);
-            setStatusText('Error looking up code. Try again.');
+            setStatusText('ERROR LOOKING UP CODE. TRY AGAIN.');
             setStatus('scanning');
             setTimeout(() => startScanning(), 1000);
         }
@@ -119,7 +119,7 @@ export default function ScanPage() {
             const imageData = canvas.toDataURL('image/png');
 
             setStatus('processing');
-            setStatusText('Analyzing...');
+            setStatusText('ANALYZING...');
 
             const result = await workerRef.current.recognize(imageData);
             const text = result.data.text.toUpperCase();
@@ -135,11 +135,11 @@ export default function ScanPage() {
             }
 
             setStatus('scanning');
-            setStatusText('Scanning... Point at a PL-XXX-XXX code');
+            setStatusText('SCANNING... POINT AT A PL-XXX-XXX CODE');
         } catch (err) {
             console.error('OCR error:', err);
             setStatus('scanning');
-            setStatusText('Scanning...');
+            setStatusText('SCANNING...');
         }
 
         isProcessingRef.current = false;
@@ -157,7 +157,7 @@ export default function ScanPage() {
     const startCamera = async () => {
         try {
             setStatus('initializing');
-            setStatusText('Requesting camera access...');
+            setStatusText('REQUESTING CAMERA ACCESS...');
             setCameraError('');
 
             // Check if mediaDevices is available
@@ -182,13 +182,13 @@ export default function ScanPage() {
             }
 
             // Initialize OCR worker dynamically
-            setStatusText('Loading OCR engine...');
+            setStatusText('LOADING OCR ENGINE...');
 
             const Tesseract = (await import('tesseract.js')).default;
             const worker = await Tesseract.createWorker('eng', 1, {
                 logger: (m: any) => {
                     if (m.status === 'recognizing text') {
-                        setStatusText(`Processing: ${Math.round(m.progress * 100)}%`);
+                        setStatusText(`PROCESSING: ${Math.round(m.progress * 100)}%`);
                     }
                 },
             });
@@ -200,7 +200,7 @@ export default function ScanPage() {
             workerRef.current = worker;
 
             setStatus('scanning');
-            setStatusText('Point camera at handwritten code');
+            setStatusText('POINT CAMERA AT HANDWRITTEN CODE');
 
             // Start scanning every 2 seconds
             startScanning();
@@ -209,11 +209,11 @@ export default function ScanPage() {
             const errorMessage = err instanceof Error ? err.message : 'Camera error';
 
             if (errorMessage.includes('Permission') || errorMessage.includes('denied')) {
-                setCameraError('Camera permission denied. Please enable camera access in your browser settings.');
+                setCameraError('CAMERA PERMISSION DENIED. PLEASE ENABLE CAMERA ACCESS IN YOUR BROWSER SETTINGS.');
             } else if (errorMessage.includes('not supported')) {
-                setCameraError('Camera not supported. Please use the manual entry below.');
+                setCameraError('CAMERA NOT SUPPORTED. PLEASE USE THE MANUAL ENTRY BELOW.');
             } else {
-                setCameraError(`Could not access camera: ${errorMessage}. Try using manual entry below.`);
+                setCameraError(`COULD NOT ACCESS CAMERA: ${errorMessage.toUpperCase()}. TRY USING MANUAL ENTRY BELOW.`);
             }
             setStatus('error');
         }
@@ -233,113 +233,136 @@ export default function ScanPage() {
         setStatus('scanning');
         setDetectedCode('');
         setDetectedUrl('');
-        setStatusText('Scanning...');
+        setStatusText('SCANNING...');
         startScanning();
     };
 
     return (
         <div className="container">
-            <header className="header">
-                <h1 className="logo">PaperLink</h1>
-                <p className="tagline">Scan your handwritten codes</p>
-            </header>
-
-            <nav className="nav-tabs">
-                <Link href="/" className="nav-tab">
-                    ✍️ Write
-                </Link>
-                <Link href="/scan" className="nav-tab active">
-                    📷 Scan
-                </Link>
-            </nav>
-
-            <main className="scanner-container">
-                {status === 'idle' && (
-                    <div className="card text-center">
-                        <h2 className="card-title">Camera Scanner</h2>
-                        <p style={{ marginBottom: '20px', color: 'var(--text-secondary)' }}>
-                            Scan handwritten PaperLink codes from your notes
-                        </p>
-                        <button onClick={startCamera} className="btn btn-primary">
-                            📷 Start Camera
-                        </button>
+            {/* Main Winamp Window */}
+            <div className="winamp-window">
+                {/* Title Bar */}
+                <div className="winamp-titlebar">
+                    <span className="winamp-titlebar-text">PAPERLINK SCANNER</span>
+                    <div className="winamp-titlebar-buttons">
+                        <div className="winamp-titlebar-btn">_</div>
+                        <div className="winamp-titlebar-btn">□</div>
+                        <div className="winamp-titlebar-btn">×</div>
                     </div>
-                )}
+                </div>
 
-                {cameraError && (
-                    <div className="card" style={{ borderColor: 'var(--error)' }}>
-                        <h2 className="card-title" style={{ color: 'var(--error)' }}>Camera Error</h2>
-                        <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-                            {cameraError}
-                        </p>
-                        <button onClick={startCamera} className="btn btn-secondary">
-                            Try Again
-                        </button>
-                    </div>
-                )}
-
-                {(status !== 'idle' && !cameraError) && (
-                    <>
-                        <div className="video-wrapper">
-                            <video ref={videoRef} playsInline muted autoPlay />
-                            <div className="scan-overlay" />
-                            <canvas ref={canvasRef} style={{ display: 'none' }} />
+                <div className="winamp-content">
+                    {/* LCD Header Display */}
+                    <div className="lcd-display" style={{ margin: '4px', textAlign: 'center' }}>
+                        <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px' }}>
+                            SCAN YOUR HANDWRITTEN CODES
                         </div>
+                    </div>
 
-                        <div className={`scan-status ${status === 'detected' || status === 'redirecting' ? 'detected' : ''}`}>
-                            {status === 'initializing' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center' }}>
-                                    <span className="spinner"></span>
-                                    <span>{statusText}</span>
+                    {/* Navigation Tabs */}
+                    <nav className="nav-tabs">
+                        <Link href="/" className="nav-tab">
+                            ✍️ WRITE
+                        </Link>
+                        <Link href="/scan" className="nav-tab active">
+                            📷 SCAN
+                        </Link>
+                    </nav>
+
+                    <main className="scanner-container">
+                        {/* Idle State - Start Camera */}
+                        {status === 'idle' && (
+                            <div className="card text-center">
+                                <h2 className="card-title">▶ CAMERA SCANNER</h2>
+                                <p style={{ marginBottom: '16px', fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-amber)' }}>
+                                    SCAN HANDWRITTEN PAPERLINK CODES FROM YOUR NOTES
+                                </p>
+                                <button onClick={startCamera} className="btn btn-primary">
+                                    📷 START CAMERA
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Camera Error State */}
+                        {cameraError && (
+                            <div className="card" style={{ borderColor: 'var(--winamp-red)' }}>
+                                <h2 className="card-title" style={{ color: 'var(--winamp-red)' }}>▶ CAMERA ERROR</h2>
+                                <p style={{ marginBottom: '12px', fontFamily: 'var(--font-lcd)', fontSize: '12px', color: 'var(--winamp-red)' }}>
+                                    {cameraError}
+                                </p>
+                                <button onClick={startCamera} className="btn btn-secondary">
+                                    ↻ TRY AGAIN
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Active Camera View */}
+                        {(status !== 'idle' && !cameraError) && (
+                            <>
+                                {/* Video Display */}
+                                <div className="video-wrapper">
+                                    <video ref={videoRef} playsInline muted autoPlay />
+                                    <div className="scan-overlay" />
+                                    <canvas ref={canvasRef} style={{ display: 'none' }} />
                                 </div>
-                            )}
-                            {status === 'scanning' && statusText}
-                            {status === 'processing' && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center' }}>
-                                    <span className="spinner"></span>
-                                    <span>{statusText}</span>
-                                </div>
-                            )}
-                            {(status === 'detected' || status === 'redirecting') && (
-                                <div>
-                                    <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>✅ {statusText}</div>
-                                    {detectedUrl && (
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                                            → {detectedUrl.length > 50 ? detectedUrl.substring(0, 50) + '...' : detectedUrl}
+
+                                {/* Status Display */}
+                                <div className={`scan-status ${status === 'detected' || status === 'redirecting' ? 'detected' : ''}`}>
+                                    {status === 'initializing' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
+                                            <span className="spinner"></span>
+                                            <span>{statusText}</span>
                                         </div>
                                     )}
-                                    <button onClick={cancelRedirect} className="btn btn-secondary">
-                                        Cancel
+                                    {status === 'scanning' && statusText}
+                                    {status === 'processing' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
+                                            <span className="spinner"></span>
+                                            <span>{statusText}</span>
+                                        </div>
+                                    )}
+                                    {(status === 'detected' || status === 'redirecting') && (
+                                        <div>
+                                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
+                                            {detectedUrl && (
+                                                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+                                                    → {detectedUrl.length > 40 ? detectedUrl.substring(0, 40) + '...' : detectedUrl}
+                                                </div>
+                                            )}
+                                            <button onClick={cancelRedirect} className="btn btn-secondary">
+                                                ✕ CANCEL
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        {/* Manual Entry Section */}
+                        <div className="card" style={{ marginTop: '4px' }}>
+                            <h2 className="card-title">▶ MANUAL ENTRY</h2>
+                            <p style={{ marginBottom: '12px', fontFamily: 'var(--font-lcd)', fontSize: '12px', color: 'var(--text-dim)' }}>
+                                CAN&apos;T SCAN? TYPE THE CODE MANUALLY:
+                            </p>
+                            <form onSubmit={handleManualSubmit}>
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        placeholder="PL-XXX-XXX"
+                                        value={manualCode}
+                                        onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                                        style={{ textTransform: 'uppercase', letterSpacing: '2px' }}
+                                    />
+                                    <button type="submit" className="btn btn-secondary">
+                                        ▶ GO
                                     </button>
                                 </div>
-                            )}
+                            </form>
                         </div>
-                    </>
-                )}
-
-                {/* Manual entry fallback */}
-                <div className="card" style={{ marginTop: '20px' }}>
-                    <h2 className="card-title">Manual Entry</h2>
-                    <p style={{ marginBottom: '16px', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                        Can&apos;t scan? Type the code manually:
-                    </p>
-                    <form onSubmit={handleManualSubmit}>
-                        <div className="input-group">
-                            <input
-                                type="text"
-                                className="input"
-                                placeholder="PL-XXX-XXX"
-                                value={manualCode}
-                                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                                style={{ fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                            />
-                            <button type="submit" className="btn btn-secondary">
-                                Go →
-                            </button>
-                        </div>
-                    </form>
+                    </main>
                 </div>
-            </main>
+            </div>
         </div>
     );
 }
