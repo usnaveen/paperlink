@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 
 type ScanStatus = 'idle' | 'initializing' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'error';
@@ -14,20 +14,20 @@ export default function ScanPage() {
     const [manualCode, setManualCode] = useState('');
     const [cameraError, setCameraError] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [isCameraActive, setIsCameraActive] = useState(false);
+    const [isVideoReady, setIsVideoReady] = useState(false);
 
     const streamRef = useRef<MediaStream | null>(null);
     const workerRef = useRef<any>(null);
 
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
 
-    const stopCamera = () => {
+    const stopCamera = useCallback(() => {
         if (streamRef.current) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
-        setIsCameraActive(false);
-    };
+        setIsVideoReady(false);
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -36,7 +36,7 @@ export default function ScanPage() {
                 workerRef.current.terminate().catch(() => { });
             }
         };
-    }, []);
+    }, [stopCamera]);
 
     // Handle detected code - INSTANT redirect
     const handleCodeDetected = async (code: string) => {
@@ -70,20 +70,21 @@ export default function ScanPage() {
 
     // Capture photo and crop to scanning rectangle
     const captureAndProcess = async () => {
-        if (!videoRef.current || !canvasRef.current) {
-            setStatusText('Camera not ready. Please wait...');
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+
+        if (!video || !canvas) {
+            setStatusText('Camera elements not ready. Try again.');
             return;
         }
 
         if (!workerRef.current) {
-            setStatusText('OCR engine not ready. Please wait...');
+            setStatusText('OCR engine loading. Please wait...');
             return;
         }
 
-        const video = videoRef.current;
-
-        if (video.videoWidth === 0 || video.videoHeight === 0) {
-            setStatusText('Camera not ready. Please wait a moment...');
+        if (!isVideoReady || video.videoWidth === 0 || video.videoHeight === 0) {
+            setStatusText('Camera still loading. Please wait a second...');
             return;
         }
 
@@ -91,9 +92,10 @@ export default function ScanPage() {
         setStatusText('Capturing...');
 
         try {
-            const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            if (!ctx) return;
+            if (!ctx) {
+                throw new Error('Could not get canvas context');
+            }
 
             // Calculate crop region (matching the scan overlay: 80% width, 25% height, centered)
             const overlayWidthPercent = 0.80;
@@ -146,6 +148,12 @@ export default function ScanPage() {
         }
     };
 
+    // Handle video ready
+    const handleVideoCanPlay = () => {
+        setIsVideoReady(true);
+        console.log('Video is ready to play');
+    };
+
     // Start camera
     const startCamera = async () => {
         try {
@@ -153,6 +161,7 @@ export default function ScanPage() {
             setStatusText('Requesting camera access...');
             setCameraError('');
             setCapturedImage(null);
+            setIsVideoReady(false);
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera not supported on this device/browser');
@@ -166,25 +175,20 @@ export default function ScanPage() {
                 },
             };
 
+            setStatusText('Accessing camera...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             streamRef.current = stream;
 
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-
-                // Wait for video to be ready
-                await new Promise<void>((resolve, reject) => {
-                    const video = videoRef.current!;
-                    video.onloadedmetadata = () => {
-                        video.play()
-                            .then(() => resolve())
-                            .catch(reject);
-                    };
-                    video.onerror = () => reject(new Error('Video failed to load'));
-                });
+            const video = videoRef.current;
+            if (video) {
+                video.srcObject = stream;
+                // Play is handled by autoPlay, but we call it anyway
+                try {
+                    await video.play();
+                } catch (playError) {
+                    console.log('Autoplay handled:', playError);
+                }
             }
-
-            setIsCameraActive(true);
 
             // Initialize OCR worker
             setStatusText('Loading OCR engine...');
@@ -218,7 +222,6 @@ export default function ScanPage() {
                 setCameraError(`Could not access camera: ${errorMessage}. Try using manual entry below.`);
             }
             setStatus('error');
-            setIsCameraActive(false);
         }
     };
 
@@ -237,6 +240,8 @@ export default function ScanPage() {
         setStatus('camera-ready');
         setStatusText('Position code in the rectangle, then tap Capture');
     };
+
+    const showCamera = status !== 'idle' && status !== 'error';
 
     return (
         <div className="container">
@@ -268,7 +273,7 @@ export default function ScanPage() {
 
                     <main className="scanner-container">
                         {/* Start Camera Button - only show when idle */}
-                        {status === 'idle' && !isCameraActive && (
+                        {status === 'idle' && (
                             <div className="card text-center">
                                 <h2 className="card-title">▶ Camera Scanner</h2>
                                 <p style={{
@@ -304,21 +309,8 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Initializing State */}
-                        {status === 'initializing' && (
-                            <div className="card text-center">
-                                <h2 className="card-title">▶ Starting Camera</h2>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center', padding: '20px' }}>
-                                    <span className="spinner"></span>
-                                    <span style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-text)' }}>
-                                        {statusText}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Camera View - show when camera is active */}
-                        {(isCameraActive || status === 'camera-ready' || status === 'capturing' || status === 'processing' || status === 'detected') && status !== 'error' && status !== 'idle' && status !== 'initializing' && (
+                        {/* Camera View - ALWAYS render video element when camera is requested */}
+                        {showCamera && (
                             <>
                                 <div className="video-wrapper">
                                     {/* Show captured image when available, otherwise show video */}
@@ -340,9 +332,37 @@ export default function ScanPage() {
                                                 playsInline
                                                 muted
                                                 autoPlay
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                onCanPlay={handleVideoCanPlay}
+                                                onLoadedMetadata={handleVideoCanPlay}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'cover',
+                                                    display: status === 'initializing' ? 'none' : 'block'
+                                                }}
                                             />
-                                            <div className="scan-overlay" />
+                                            {status === 'initializing' && (
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    height: '100%',
+                                                    background: '#000'
+                                                }}>
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <span className="spinner" style={{ marginBottom: '10px' }}></span>
+                                                        <div style={{
+                                                            fontFamily: 'var(--font-lcd)',
+                                                            fontSize: '14px',
+                                                            color: 'var(--lcd-text)',
+                                                            marginTop: '10px'
+                                                        }}>
+                                                            {statusText}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {status !== 'initializing' && <div className="scan-overlay" />}
                                         </>
                                     )}
                                     <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -350,6 +370,11 @@ export default function ScanPage() {
 
                                 {/* Status Display */}
                                 <div className={`scan-status ${status === 'detected' ? 'detected' : ''}`}>
+                                    {status === 'initializing' && (
+                                        <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>
+                                            Setting up camera...
+                                        </div>
+                                    )}
                                     {status === 'camera-ready' && !capturedImage && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
                                             <span>{statusText}</span>
@@ -357,8 +382,9 @@ export default function ScanPage() {
                                                 onClick={captureAndProcess}
                                                 className="btn btn-primary"
                                                 style={{ marginTop: '8px' }}
+                                                disabled={!isVideoReady}
                                             >
-                                                📸 Capture & Scan
+                                                {isVideoReady ? '📸 Capture & Scan' : '⏳ Camera loading...'}
                                             </button>
                                         </div>
                                     )}
