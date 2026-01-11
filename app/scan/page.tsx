@@ -2,16 +2,18 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import AuthButton from '@/components/AuthButton';
 
 type ScanStatus = 'idle' | 'initializing' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'error';
 
 export default function ScanPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [statusText, setStatusText] = useState('');
     const [detectedCode, setDetectedCode] = useState('');
-    const [manualCodeChars, setManualCodeChars] = useState(''); // Just the 6 characters (no PL- or dashes)
+    const [manualCodeChars, setManualCodeChars] = useState('');
     const [cameraError, setCameraError] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
@@ -30,6 +32,16 @@ export default function ScanPage() {
         setIsVideoReady(false);
     }, []);
 
+    // Full reset to initial state
+    const resetToInitial = useCallback(() => {
+        stopCamera();
+        setCapturedImage(null);
+        setStatus('idle');
+        setStatusText('');
+        setCameraError('');
+        setDetectedCode('');
+    }, [stopCamera]);
+
     useEffect(() => {
         return () => {
             stopCamera();
@@ -38,23 +50,6 @@ export default function ScanPage() {
             }
         };
     }, [stopCamera]);
-
-    // Format the 6 characters into PL-XXX-XXX format
-    const formatCode = (chars: string): string => {
-        const clean = chars.toUpperCase().replace(/[^23456789ACDEFGHJKLMNPQRTUVWXY]/g, '').slice(0, 6);
-        if (clean.length <= 3) {
-            return `PL-${clean}`;
-        }
-        return `PL-${clean.slice(0, 3)}-${clean.slice(3)}`;
-    };
-
-    // Get display format for the input
-    const getDisplayCode = (): string => {
-        const chars = manualCodeChars.toUpperCase();
-        const part1 = chars.slice(0, 3).padEnd(3, '_');
-        const part2 = chars.slice(3, 6).padEnd(3, '_');
-        return `PL-${part1}-${part2}`;
-    };
 
     // Handle detected code - INSTANT redirect
     const handleCodeDetected = async (code: string) => {
@@ -71,19 +66,20 @@ export default function ScanPage() {
             const data = await response.json();
 
             if (response.ok && data.url) {
-                // INSTANT redirect - no delay
                 window.location.href = data.url;
             } else {
-                setStatusText(`Code "${code}" not found. Try again.`);
-                setStatus('camera-ready');
-                setCapturedImage(null);
-                // Don't reset isVideoReady - camera should still be working
+                setStatusText(`Code "${code}" not found.`);
+                // Reset to initial state after 1.5 seconds
+                setTimeout(() => {
+                    resetToInitial();
+                }, 1500);
             }
         } catch (err) {
             console.error('Resolve error:', err);
-            setStatusText('Error looking up code. Try again.');
-            setStatus('camera-ready');
-            setCapturedImage(null);
+            setStatusText('Error looking up code.');
+            setTimeout(() => {
+                resetToInitial();
+            }, 1500);
         }
     };
 
@@ -92,18 +88,13 @@ export default function ScanPage() {
         const video = videoRef.current;
         const canvas = canvasRef.current;
 
-        if (!video || !canvas) {
-            setStatusText('Camera elements not ready. Try again.');
-            return;
-        }
-
-        if (!workerRef.current) {
-            setStatusText('OCR engine loading. Please wait...');
+        if (!video || !canvas || !workerRef.current) {
+            setStatusText('Not ready. Please wait...');
             return;
         }
 
         if (!isVideoReady || video.videoWidth === 0 || video.videoHeight === 0) {
-            setStatusText('Camera still loading. Please wait a second...');
+            setStatusText('Camera loading...');
             return;
         }
 
@@ -112,11 +103,8 @@ export default function ScanPage() {
 
         try {
             const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                throw new Error('Could not get canvas context');
-            }
+            if (!ctx) throw new Error('Could not get canvas context');
 
-            // Calculate crop region (matching the scan overlay: 80% width, 25% height, centered)
             const overlayWidthPercent = 0.80;
             const overlayHeightPercent = 0.25;
 
@@ -125,54 +113,44 @@ export default function ScanPage() {
             const cropX = (video.videoWidth - cropWidth) / 2;
             const cropY = (video.videoHeight - cropHeight) / 2;
 
-            // Set canvas to cropped dimensions
             canvas.width = cropWidth;
             canvas.height = cropHeight;
-
-            // Draw only the cropped region
-            ctx.drawImage(
-                video,
-                cropX, cropY, cropWidth, cropHeight,
-                0, 0, cropWidth, cropHeight
-            );
+            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
             const croppedImage = canvas.toDataURL('image/png');
             setCapturedImage(croppedImage);
 
-            // Process the cropped image
             setStatus('processing');
             setStatusText('Analyzing...');
 
             const result = await workerRef.current.recognize(croppedImage);
             const text = result.data.text.toUpperCase();
-
             console.log('OCR Result:', text);
 
             const matches = text.match(codePattern);
 
             if (matches && matches.length > 0) {
-                const foundCode = matches[0].toUpperCase();
-                await handleCodeDetected(foundCode);
+                await handleCodeDetected(matches[0].toUpperCase());
             } else {
-                setStatusText('No code found. Position the code in the rectangle and try again.');
-                setStatus('camera-ready');
-                setTimeout(() => setCapturedImage(null), 1500);
+                setStatusText('No code found. Try again.');
+                // Reset to initial state
+                setTimeout(() => {
+                    resetToInitial();
+                }, 1500);
             }
         } catch (err) {
             console.error('Capture error:', err);
-            setStatusText('Error processing image. Try again.');
-            setStatus('camera-ready');
-            setCapturedImage(null);
+            setStatusText('Error. Try again.');
+            setTimeout(() => {
+                resetToInitial();
+            }, 1500);
         }
     };
 
-    // Handle video ready
     const handleVideoCanPlay = () => {
-        console.log('Video can play now');
         setIsVideoReady(true);
     };
 
-    // Start camera
     const startCamera = async () => {
         try {
             setStatus('initializing');
@@ -182,93 +160,68 @@ export default function ScanPage() {
             setIsVideoReady(false);
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera not supported on this device/browser');
+                throw new Error('Camera not supported');
             }
 
-            const constraints = {
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                },
-            };
-
-            setStatusText('Accessing camera...');
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+            });
             streamRef.current = stream;
 
-            const video = videoRef.current;
-            if (video) {
-                video.srcObject = stream;
-                try {
-                    await video.play();
-                } catch (playError) {
-                    console.log('Autoplay handled:', playError);
-                }
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                await videoRef.current.play().catch(() => { });
             }
 
-            // Initialize OCR worker if not already done
             if (!workerRef.current) {
                 setStatusText('Loading OCR engine...');
-
                 const Tesseract = (await import('tesseract.js')).default;
-                const worker = await Tesseract.createWorker('eng', 1, {
-                    logger: (m: any) => {
-                        if (m.status === 'recognizing text') {
-                            setStatusText(`Processing: ${Math.round(m.progress * 100)}%`);
-                        }
-                    },
-                });
-
-                await worker.setParameters({
-                    tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-',
-                });
-
+                const worker = await Tesseract.createWorker('eng', 1);
+                await worker.setParameters({ tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-' });
                 workerRef.current = worker;
             }
 
             setStatus('camera-ready');
-            setStatusText('Position code in the rectangle, then tap Capture');
+            setStatusText('Position code in rectangle, tap Capture');
         } catch (err) {
-            console.error('Camera error:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Camera error';
-
-            if (errorMessage.includes('Permission') || errorMessage.includes('denied')) {
-                setCameraError('Camera permission denied. Please enable camera access in your browser settings.');
-            } else if (errorMessage.includes('not supported')) {
-                setCameraError('Camera not supported. Please use the manual entry below.');
-            } else {
-                setCameraError(`Could not access camera: ${errorMessage}. Try using manual entry below.`);
-            }
+            const msg = err instanceof Error ? err.message : 'Camera error';
+            setCameraError(msg.includes('Permission') ? 'Camera permission denied.' : `Camera error: ${msg}`);
             setStatus('error');
         }
     };
 
-    // Handle manual code input - only accept valid characters
-    const handleManualInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const input = e.target.value.toUpperCase();
-        // Filter to only valid characters and limit to 6
-        const filtered = input.split('').filter(c => validChars.includes(c)).slice(0, 6).join('');
-        setManualCodeChars(filtered);
-    };
+    // Handle keyboard input for manual code
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        const key = e.key.toUpperCase();
 
-    // Handle manual code entry
-    const handleManualSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (manualCodeChars.length !== 6) {
+        if (e.key === 'Backspace') {
+            setManualCodeChars(prev => prev.slice(0, -1));
+            e.preventDefault();
             return;
         }
 
+        if (e.key === 'Enter' && manualCodeChars.length === 6) {
+            handleManualSubmit();
+            e.preventDefault();
+            return;
+        }
+
+        if (validChars.includes(key) && manualCodeChars.length < 6) {
+            setManualCodeChars(prev => prev + key);
+            e.preventDefault();
+        }
+    };
+
+    const handleManualSubmit = async () => {
+        if (manualCodeChars.length !== 6) return;
         const fullCode = `PL-${manualCodeChars.slice(0, 3)}-${manualCodeChars.slice(3, 6)}`;
         await handleCodeDetected(fullCode);
     };
 
-    // Retake photo - keep camera running
-    const retakePhoto = () => {
-        setCapturedImage(null);
-        setStatus('camera-ready');
-        setStatusText('Position code in the rectangle, then tap Capture');
-        // Camera and OCR worker are still running, no need to restart
+    // Format display value
+    const getFormattedDisplay = () => {
+        const chars = manualCodeChars.padEnd(6, '_');
+        return `PL-${chars.slice(0, 3)}-${chars.slice(3, 6)}`;
     };
 
     const showCamera = status !== 'idle' && status !== 'error';
@@ -276,13 +229,10 @@ export default function ScanPage() {
     return (
         <div className="container">
             <div className="winamp-window">
+                {/* Title Bar - No window buttons */}
                 <div className="winamp-titlebar">
                     <span className="winamp-titlebar-text">PAPERLINK SCANNER</span>
-                    <div className="winamp-titlebar-buttons">
-                        <div className="winamp-titlebar-btn">−</div>
-                        <div className="winamp-titlebar-btn">□</div>
-                        <div className="winamp-titlebar-btn">×</div>
-                    </div>
+                    <AuthButton />
                 </div>
 
                 <div className="winamp-content">
@@ -293,27 +243,17 @@ export default function ScanPage() {
                     </div>
 
                     <nav className="nav-tabs">
-                        <Link href="/" className="nav-tab">
-                            ✍️ Write
-                        </Link>
-                        <Link href="/scan" className="nav-tab active">
-                            📷 Scan
-                        </Link>
+                        <Link href="/" className="nav-tab">✍️ Write</Link>
+                        <Link href="/scan" className="nav-tab active">📷 Scan</Link>
                     </nav>
 
                     <main className="scanner-container">
-                        {/* Start Camera Button */}
+                        {/* Start Camera */}
                         {status === 'idle' && (
                             <div className="card text-center">
                                 <h2 className="card-title">▶ Camera Scanner</h2>
-                                <p style={{
-                                    marginBottom: '16px',
-                                    fontFamily: 'var(--font-lcd)',
-                                    fontSize: '13px',
-                                    color: 'var(--lcd-text)',
-                                    textShadow: '0 0 8px var(--lcd-text)'
-                                }}>
-                                    Capture a photo of your handwritten PaperLink code
+                                <p style={{ marginBottom: '16px', fontFamily: 'var(--font-lcd)', fontSize: '13px', color: 'var(--lcd-text)', textShadow: '0 0 8px var(--lcd-text)' }}>
+                                    Capture a photo of your handwritten code
                                 </p>
                                 <button onClick={startCamera} className="btn btn-primary">
                                     📷 Start Camera
@@ -321,21 +261,12 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Camera Error State */}
-                        {status === 'error' && cameraError && (
+                        {/* Error */}
+                        {status === 'error' && (
                             <div className="card">
                                 <h2 className="card-title" style={{ color: '#cc3333' }}>▶ Camera Error</h2>
-                                <p style={{
-                                    marginBottom: '12px',
-                                    fontFamily: 'var(--font-label)',
-                                    fontSize: '12px',
-                                    color: '#cc3333'
-                                }}>
-                                    {cameraError}
-                                </p>
-                                <button onClick={startCamera} className="btn btn-secondary">
-                                    ↻ Try Again
-                                </button>
+                                <p style={{ marginBottom: '12px', fontSize: '12px', color: '#cc3333' }}>{cameraError}</p>
+                                <button onClick={startCamera} className="btn btn-secondary">↻ Try Again</button>
                             </div>
                         )}
 
@@ -344,51 +275,22 @@ export default function ScanPage() {
                             <>
                                 <div className="video-wrapper">
                                     {capturedImage ? (
-                                        <img
-                                            src={capturedImage}
-                                            alt="Captured"
-                                            style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'contain',
-                                                background: '#000'
-                                            }}
-                                        />
+                                        <img src={capturedImage} alt="Captured" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
                                     ) : (
                                         <>
                                             <video
                                                 ref={videoRef}
-                                                playsInline
-                                                muted
-                                                autoPlay
+                                                playsInline muted autoPlay
                                                 onCanPlay={handleVideoCanPlay}
                                                 onLoadedMetadata={handleVideoCanPlay}
                                                 onPlaying={handleVideoCanPlay}
-                                                style={{
-                                                    width: '100%',
-                                                    height: '100%',
-                                                    objectFit: 'cover',
-                                                    display: status === 'initializing' ? 'none' : 'block'
-                                                }}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: status === 'initializing' ? 'none' : 'block' }}
                                             />
                                             {status === 'initializing' && (
-                                                <div style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    height: '100%',
-                                                    background: '#000'
-                                                }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#000' }}>
                                                     <div style={{ textAlign: 'center' }}>
                                                         <span className="spinner"></span>
-                                                        <div style={{
-                                                            fontFamily: 'var(--font-lcd)',
-                                                            fontSize: '14px',
-                                                            color: 'var(--lcd-text)',
-                                                            marginTop: '10px'
-                                                        }}>
-                                                            {statusText}
-                                                        </div>
+                                                        <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-text)', marginTop: '10px' }}>{statusText}</div>
                                                     </div>
                                                 </div>
                                             )}
@@ -398,31 +300,12 @@ export default function ScanPage() {
                                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                                 </div>
 
-                                {/* Status Display */}
                                 <div className={`scan-status ${status === 'detected' ? 'detected' : ''}`}>
-                                    {status === 'initializing' && (
-                                        <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>
-                                            Setting up camera...
-                                        </div>
-                                    )}
                                     {status === 'camera-ready' && !capturedImage && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
                                             <span>{statusText}</span>
-                                            <button
-                                                onClick={captureAndProcess}
-                                                className="btn btn-primary"
-                                                style={{ marginTop: '8px' }}
-                                                disabled={!isVideoReady}
-                                            >
-                                                {isVideoReady ? '📸 Capture & Scan' : '⏳ Camera loading...'}
-                                            </button>
-                                        </div>
-                                    )}
-                                    {status === 'camera-ready' && capturedImage && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-                                            <span>{statusText}</span>
-                                            <button onClick={retakePhoto} className="btn btn-secondary">
-                                                ↻ Retake Photo
+                                            <button onClick={captureAndProcess} className="btn btn-primary" disabled={!isVideoReady}>
+                                                {isVideoReady ? '📸 Capture & Scan' : '⏳ Loading...'}
                                             </button>
                                         </div>
                                     )}
@@ -435,70 +318,72 @@ export default function ScanPage() {
                                     {status === 'detected' && (
                                         <div>
                                             <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>
-                                                Redirecting...
-                                            </div>
+                                            <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>Redirecting...</div>
                                         </div>
                                     )}
                                 </div>
                             </>
                         )}
 
-                        {/* Manual Entry - Auto-formatted */}
+                        {/* Manual Entry - Single editable input */}
                         <div className="card">
                             <h2 className="card-title">▶ Manual Entry</h2>
-                            <p style={{
-                                marginBottom: '12px',
-                                fontFamily: 'var(--font-label)',
-                                fontSize: '11px',
-                                color: 'var(--light-gray)'
-                            }}>
-                                Type the 6 characters (no need to type PL- or dashes):
+                            <p style={{ marginBottom: '12px', fontFamily: 'var(--font-label)', fontSize: '11px', color: 'var(--light-gray)' }}>
+                                Tap below and type the 6 characters:
                             </p>
-                            <form onSubmit={handleManualSubmit}>
-                                <div className="input-group">
-                                    {/* Display formatted code */}
-                                    <div style={{
+                            <div style={{ position: 'relative' }}>
+                                {/* Visible formatted display */}
+                                <div
+                                    onClick={() => inputRef.current?.focus()}
+                                    style={{
                                         fontFamily: 'var(--font-lcd)',
-                                        fontSize: '24px',
+                                        fontSize: '28px',
                                         color: 'var(--lcd-text)',
-                                        textShadow: '0 0 8px var(--lcd-text)',
+                                        textShadow: '0 0 10px var(--lcd-text)',
                                         textAlign: 'center',
-                                        padding: '12px',
+                                        padding: '16px',
                                         background: 'linear-gradient(180deg, var(--lcd-bg-light) 0%, var(--lcd-bg-dark) 100%)',
                                         border: '2px solid var(--shadow-deep)',
-                                        borderRadius: '3px',
-                                        letterSpacing: '4px',
-                                        marginBottom: '10px'
-                                    }}>
-                                        {getDisplayCode()}
-                                    </div>
-                                    <input
-                                        type="text"
-                                        className="input"
-                                        placeholder="Type 6 characters..."
-                                        value={manualCodeChars}
-                                        onChange={handleManualInput}
-                                        maxLength={6}
-                                        style={{
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '3px',
-                                            textAlign: 'center',
-                                            fontSize: '18px'
-                                        }}
-                                        autoComplete="off"
-                                        autoCorrect="off"
-                                        autoCapitalize="characters"
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="btn btn-primary"
-                                        disabled={manualCodeChars.length !== 6}
-                                    >
-                                        {manualCodeChars.length === 6 ? '▶ Go' : `${manualCodeChars.length}/6 chars`}
-                                    </button>
+                                        borderRadius: '4px',
+                                        letterSpacing: '6px',
+                                        cursor: 'text',
+                                        minHeight: '70px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    {getFormattedDisplay()}
                                 </div>
-                            </form>
+                                {/* Hidden input for capturing keyboard */}
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value=""
+                                    onChange={() => { }}
+                                    onKeyDown={handleKeyDown}
+                                    style={{
+                                        position: 'absolute',
+                                        opacity: 0,
+                                        width: '100%',
+                                        height: '100%',
+                                        top: 0,
+                                        left: 0,
+                                        cursor: 'text'
+                                    }}
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="characters"
+                                />
+                            </div>
+                            <button
+                                onClick={handleManualSubmit}
+                                className="btn btn-primary"
+                                disabled={manualCodeChars.length !== 6}
+                                style={{ marginTop: '12px', width: '100%' }}
+                            >
+                                {manualCodeChars.length === 6 ? '▶ Go' : `${manualCodeChars.length}/6 characters`}
+                            </button>
                         </div>
                     </main>
                 </div>
