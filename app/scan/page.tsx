@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 
-type ScanStatus = 'idle' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'error';
+type ScanStatus = 'idle' | 'initializing' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'error';
 
 export default function ScanPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -14,6 +14,7 @@ export default function ScanPage() {
     const [manualCode, setManualCode] = useState('');
     const [cameraError, setCameraError] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [isCameraActive, setIsCameraActive] = useState(false);
 
     const streamRef = useRef<MediaStream | null>(null);
     const workerRef = useRef<any>(null);
@@ -25,6 +26,7 @@ export default function ScanPage() {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
+        setIsCameraActive(false);
     };
 
     useEffect(() => {
@@ -68,22 +70,30 @@ export default function ScanPage() {
 
     // Capture photo and crop to scanning rectangle
     const captureAndProcess = async () => {
-        if (!videoRef.current || !canvasRef.current || !workerRef.current) return;
+        if (!videoRef.current || !canvasRef.current) {
+            setStatusText('Camera not ready. Please wait...');
+            return;
+        }
+
+        if (!workerRef.current) {
+            setStatusText('OCR engine not ready. Please wait...');
+            return;
+        }
+
+        const video = videoRef.current;
+
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+            setStatusText('Camera not ready. Please wait a moment...');
+            return;
+        }
 
         setStatus('capturing');
         setStatusText('Capturing...');
 
         try {
-            const video = videoRef.current;
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
-
-            if (video.videoWidth === 0 || video.videoHeight === 0) {
-                setStatusText('Camera not ready. Try again.');
-                setStatus('camera-ready');
-                return;
-            }
 
             // Calculate crop region (matching the scan overlay: 80% width, 25% height, centered)
             const overlayWidthPercent = 0.80;
@@ -139,7 +149,7 @@ export default function ScanPage() {
     // Start camera
     const startCamera = async () => {
         try {
-            setStatus('idle');
+            setStatus('initializing');
             setStatusText('Requesting camera access...');
             setCameraError('');
             setCapturedImage(null);
@@ -161,8 +171,20 @@ export default function ScanPage() {
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-                await videoRef.current.play();
+
+                // Wait for video to be ready
+                await new Promise<void>((resolve, reject) => {
+                    const video = videoRef.current!;
+                    video.onloadedmetadata = () => {
+                        video.play()
+                            .then(() => resolve())
+                            .catch(reject);
+                    };
+                    video.onerror = () => reject(new Error('Video failed to load'));
+                });
             }
+
+            setIsCameraActive(true);
 
             // Initialize OCR worker
             setStatusText('Loading OCR engine...');
@@ -196,6 +218,7 @@ export default function ScanPage() {
                 setCameraError(`Could not access camera: ${errorMessage}. Try using manual entry below.`);
             }
             setStatus('error');
+            setIsCameraActive(false);
         }
     };
 
@@ -244,8 +267,8 @@ export default function ScanPage() {
                     </nav>
 
                     <main className="scanner-container">
-                        {/* Idle State */}
-                        {status === 'idle' && !streamRef.current && (
+                        {/* Start Camera Button - only show when idle */}
+                        {status === 'idle' && !isCameraActive && (
                             <div className="card text-center">
                                 <h2 className="card-title">▶ Camera Scanner</h2>
                                 <p style={{
@@ -264,7 +287,7 @@ export default function ScanPage() {
                         )}
 
                         {/* Camera Error State */}
-                        {cameraError && (
+                        {status === 'error' && cameraError && (
                             <div className="card">
                                 <h2 className="card-title" style={{ color: '#cc3333' }}>▶ Camera Error</h2>
                                 <p style={{
@@ -281,8 +304,21 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Camera View or Captured Image */}
-                        {(status !== 'idle' || streamRef.current) && !cameraError && (
+                        {/* Initializing State */}
+                        {status === 'initializing' && (
+                            <div className="card text-center">
+                                <h2 className="card-title">▶ Starting Camera</h2>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center', padding: '20px' }}>
+                                    <span className="spinner"></span>
+                                    <span style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-text)' }}>
+                                        {statusText}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Camera View - show when camera is active */}
+                        {(isCameraActive || status === 'camera-ready' || status === 'capturing' || status === 'processing' || status === 'detected') && status !== 'error' && status !== 'idle' && status !== 'initializing' && (
                             <>
                                 <div className="video-wrapper">
                                     {/* Show captured image when available, otherwise show video */}
@@ -299,7 +335,13 @@ export default function ScanPage() {
                                         />
                                     ) : (
                                         <>
-                                            <video ref={videoRef} playsInline muted autoPlay />
+                                            <video
+                                                ref={videoRef}
+                                                playsInline
+                                                muted
+                                                autoPlay
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            />
                                             <div className="scan-overlay" />
                                         </>
                                     )}
@@ -308,7 +350,7 @@ export default function ScanPage() {
 
                                 {/* Status Display */}
                                 <div className={`scan-status ${status === 'detected' ? 'detected' : ''}`}>
-                                    {status === 'camera-ready' && (
+                                    {status === 'camera-ready' && !capturedImage && (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
                                             <span>{statusText}</span>
                                             <button
@@ -317,6 +359,14 @@ export default function ScanPage() {
                                                 style={{ marginTop: '8px' }}
                                             >
                                                 📸 Capture & Scan
+                                            </button>
+                                        </div>
+                                    )}
+                                    {status === 'camera-ready' && capturedImage && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
+                                            <span>{statusText}</span>
+                                            <button onClick={retakePhoto} className="btn btn-secondary">
+                                                ↻ Retake Photo
                                             </button>
                                         </div>
                                     )}
@@ -335,15 +385,6 @@ export default function ScanPage() {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* Retake button when image is captured but no code found */}
-                                {capturedImage && status === 'camera-ready' && (
-                                    <div style={{ textAlign: 'center', marginTop: '8px' }}>
-                                        <button onClick={retakePhoto} className="btn btn-secondary">
-                                            ↻ Retake Photo
-                                        </button>
-                                    </div>
-                                )}
                             </>
                         )}
 
