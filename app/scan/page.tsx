@@ -20,10 +20,8 @@ export default function ScanPage() {
     const workerRef = useRef<any>(null);
     const isProcessingRef = useRef(false);
 
-    // Pattern for PaperLink codes
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
 
-    // Stop camera and cleanup
     const stopCamera = () => {
         if (scanIntervalRef.current) {
             clearInterval(scanIntervalRef.current);
@@ -35,7 +33,6 @@ export default function ScanPage() {
         }
     };
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             stopCamera();
@@ -45,9 +42,7 @@ export default function ScanPage() {
         };
     }, []);
 
-    // Handle detected code
     const handleCodeDetected = async (code: string) => {
-        // Stop scanning
         if (scanIntervalRef.current) {
             clearInterval(scanIntervalRef.current);
             scanIntervalRef.current = null;
@@ -55,14 +50,12 @@ export default function ScanPage() {
 
         setStatus('detected');
         setDetectedCode(code);
-        setStatusText(`FOUND: ${code}`);
+        setStatusText(`Found: ${code}`);
 
-        // Haptic feedback
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
             navigator.vibrate([100, 50, 100]);
         }
 
-        // Resolve the code
         try {
             const response = await fetch(`/api/resolve/${encodeURIComponent(code)}`);
             const data = await response.json();
@@ -70,26 +63,24 @@ export default function ScanPage() {
             if (response.ok && data.url) {
                 setDetectedUrl(data.url);
                 setStatus('redirecting');
-                setStatusText('OPENING LINK IN 2 SECONDS...');
+                setStatusText('Opening link in 2 seconds...');
 
-                // Auto-redirect after 2 seconds
                 setTimeout(() => {
                     window.location.href = data.url;
                 }, 2000);
             } else {
-                setStatusText(`CODE "${code}" NOT FOUND. TRY AGAIN.`);
+                setStatusText(`Code "${code}" not found. Try again.`);
                 setStatus('scanning');
                 setTimeout(() => startScanning(), 1000);
             }
         } catch (err) {
             console.error('Resolve error:', err);
-            setStatusText('ERROR LOOKING UP CODE. TRY AGAIN.');
+            setStatusText('Error looking up code. Try again.');
             setStatus('scanning');
             setTimeout(() => startScanning(), 1000);
         }
     };
 
-    // Capture frame and run OCR
     const captureAndScan = async () => {
         if (!videoRef.current || !canvasRef.current || !workerRef.current) return;
         if (isProcessingRef.current) return;
@@ -102,29 +93,23 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            // Check if video is ready
             if (video.videoWidth === 0 || video.videoHeight === 0) {
                 isProcessingRef.current = false;
                 return;
             }
 
-            // Set canvas size to match video
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-
-            // Draw current frame
             ctx.drawImage(video, 0, 0);
 
-            // Get image data for OCR
             const imageData = canvas.toDataURL('image/png');
 
             setStatus('processing');
-            setStatusText('ANALYZING...');
+            setStatusText('Analyzing...');
 
             const result = await workerRef.current.recognize(imageData);
             const text = result.data.text.toUpperCase();
 
-            // Look for PaperLink codes
             const matches = text.match(codePattern);
 
             if (matches && matches.length > 0) {
@@ -135,17 +120,16 @@ export default function ScanPage() {
             }
 
             setStatus('scanning');
-            setStatusText('SCANNING... POINT AT A PL-XXX-XXX CODE');
+            setStatusText('Scanning... Point at a PL-XXX-XXX code');
         } catch (err) {
             console.error('OCR error:', err);
             setStatus('scanning');
-            setStatusText('SCANNING...');
+            setStatusText('Scanning...');
         }
 
         isProcessingRef.current = false;
     };
 
-    // Start continuous scanning
     const startScanning = () => {
         if (scanIntervalRef.current) {
             clearInterval(scanIntervalRef.current);
@@ -153,14 +137,12 @@ export default function ScanPage() {
         scanIntervalRef.current = setInterval(captureAndScan, 2000);
     };
 
-    // Start camera
     const startCamera = async () => {
         try {
             setStatus('initializing');
-            setStatusText('REQUESTING CAMERA ACCESS...');
+            setStatusText('Requesting camera access...');
             setCameraError('');
 
-            // Check if mediaDevices is available
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera not supported on this device/browser');
             }
@@ -181,14 +163,13 @@ export default function ScanPage() {
                 await videoRef.current.play();
             }
 
-            // Initialize OCR worker dynamically
-            setStatusText('LOADING OCR ENGINE...');
+            setStatusText('Loading OCR engine...');
 
             const Tesseract = (await import('tesseract.js')).default;
             const worker = await Tesseract.createWorker('eng', 1, {
                 logger: (m: any) => {
                     if (m.status === 'recognizing text') {
-                        setStatusText(`PROCESSING: ${Math.round(m.progress * 100)}%`);
+                        setStatusText(`Processing: ${Math.round(m.progress * 100)}%`);
                     }
                 },
             });
@@ -200,26 +181,24 @@ export default function ScanPage() {
             workerRef.current = worker;
 
             setStatus('scanning');
-            setStatusText('POINT CAMERA AT HANDWRITTEN CODE');
+            setStatusText('Point camera at handwritten code');
 
-            // Start scanning every 2 seconds
             startScanning();
         } catch (err) {
             console.error('Camera error:', err);
             const errorMessage = err instanceof Error ? err.message : 'Camera error';
 
             if (errorMessage.includes('Permission') || errorMessage.includes('denied')) {
-                setCameraError('CAMERA PERMISSION DENIED. PLEASE ENABLE CAMERA ACCESS IN YOUR BROWSER SETTINGS.');
+                setCameraError('Camera permission denied. Please enable camera access in your browser settings.');
             } else if (errorMessage.includes('not supported')) {
-                setCameraError('CAMERA NOT SUPPORTED. PLEASE USE THE MANUAL ENTRY BELOW.');
+                setCameraError('Camera not supported. Please use the manual entry below.');
             } else {
-                setCameraError(`COULD NOT ACCESS CAMERA: ${errorMessage.toUpperCase()}. TRY USING MANUAL ENTRY BELOW.`);
+                setCameraError(`Could not access camera: ${errorMessage}. Try using manual entry below.`);
             }
             setStatus('error');
         }
     };
 
-    // Handle manual code entry
     const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!manualCode.trim()) return;
@@ -228,12 +207,11 @@ export default function ScanPage() {
         await handleCodeDetected(code);
     };
 
-    // Cancel redirect
     const cancelRedirect = () => {
         setStatus('scanning');
         setDetectedCode('');
         setDetectedUrl('');
-        setStatusText('SCANNING...');
+        setStatusText('Scanning...');
         startScanning();
     };
 
@@ -241,20 +219,20 @@ export default function ScanPage() {
         <div className="container">
             {/* Main Winamp Window */}
             <div className="winamp-window">
-                {/* Title Bar */}
+                {/* Title Bar - Metallic Header */}
                 <div className="winamp-titlebar">
                     <span className="winamp-titlebar-text">PAPERLINK SCANNER</span>
                     <div className="winamp-titlebar-buttons">
-                        <div className="winamp-titlebar-btn">_</div>
+                        <div className="winamp-titlebar-btn">−</div>
                         <div className="winamp-titlebar-btn">□</div>
                         <div className="winamp-titlebar-btn">×</div>
                     </div>
                 </div>
 
                 <div className="winamp-content">
-                    {/* LCD Header Display */}
-                    <div className="lcd-display" style={{ margin: '4px', textAlign: 'center' }}>
-                        <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px' }}>
+                    {/* LCD Display Header */}
+                    <div className="lcd-display">
+                        <div className="lcd-text lcd-text-medium" style={{ textAlign: 'center' }}>
                             SCAN YOUR HANDWRITTEN CODES
                         </div>
                     </div>
@@ -262,36 +240,47 @@ export default function ScanPage() {
                     {/* Navigation Tabs */}
                     <nav className="nav-tabs">
                         <Link href="/" className="nav-tab">
-                            ✍️ WRITE
+                            ✍️ Write
                         </Link>
                         <Link href="/scan" className="nav-tab active">
-                            📷 SCAN
+                            📷 Scan
                         </Link>
                     </nav>
 
                     <main className="scanner-container">
-                        {/* Idle State - Start Camera */}
+                        {/* Idle State */}
                         {status === 'idle' && (
                             <div className="card text-center">
-                                <h2 className="card-title">▶ CAMERA SCANNER</h2>
-                                <p style={{ marginBottom: '16px', fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-amber)' }}>
-                                    SCAN HANDWRITTEN PAPERLINK CODES FROM YOUR NOTES
+                                <h2 className="card-title">▶ Camera Scanner</h2>
+                                <p style={{
+                                    marginBottom: '16px',
+                                    fontFamily: 'var(--font-lcd)',
+                                    fontSize: '13px',
+                                    color: 'var(--lcd-text)',
+                                    textShadow: '0 0 8px var(--lcd-text)'
+                                }}>
+                                    Scan handwritten PaperLink codes from your notes
                                 </p>
                                 <button onClick={startCamera} className="btn btn-primary">
-                                    📷 START CAMERA
+                                    📷 Start Camera
                                 </button>
                             </div>
                         )}
 
                         {/* Camera Error State */}
                         {cameraError && (
-                            <div className="card" style={{ borderColor: 'var(--winamp-red)' }}>
-                                <h2 className="card-title" style={{ color: 'var(--winamp-red)' }}>▶ CAMERA ERROR</h2>
-                                <p style={{ marginBottom: '12px', fontFamily: 'var(--font-lcd)', fontSize: '12px', color: 'var(--winamp-red)' }}>
+                            <div className="card">
+                                <h2 className="card-title" style={{ color: '#cc3333' }}>▶ Camera Error</h2>
+                                <p style={{
+                                    marginBottom: '12px',
+                                    fontFamily: 'var(--font-label)',
+                                    fontSize: '12px',
+                                    color: '#cc3333'
+                                }}>
                                     {cameraError}
                                 </p>
                                 <button onClick={startCamera} className="btn btn-secondary">
-                                    ↻ TRY AGAIN
+                                    ↻ Try Again
                                 </button>
                             </div>
                         )}
@@ -299,14 +288,12 @@ export default function ScanPage() {
                         {/* Active Camera View */}
                         {(status !== 'idle' && !cameraError) && (
                             <>
-                                {/* Video Display */}
                                 <div className="video-wrapper">
                                     <video ref={videoRef} playsInline muted autoPlay />
                                     <div className="scan-overlay" />
                                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                                 </div>
 
-                                {/* Status Display */}
                                 <div className={`scan-status ${status === 'detected' || status === 'redirecting' ? 'detected' : ''}`}>
                                     {status === 'initializing' && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
@@ -325,12 +312,12 @@ export default function ScanPage() {
                                         <div>
                                             <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
                                             {detectedUrl && (
-                                                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+                                                <div style={{ fontSize: '11px', color: 'var(--light-gray)', marginBottom: '10px' }}>
                                                     → {detectedUrl.length > 40 ? detectedUrl.substring(0, 40) + '...' : detectedUrl}
                                                 </div>
                                             )}
                                             <button onClick={cancelRedirect} className="btn btn-secondary">
-                                                ✕ CANCEL
+                                                ✕ Cancel
                                             </button>
                                         </div>
                                     )}
@@ -338,11 +325,16 @@ export default function ScanPage() {
                             </>
                         )}
 
-                        {/* Manual Entry Section */}
-                        <div className="card" style={{ marginTop: '4px' }}>
-                            <h2 className="card-title">▶ MANUAL ENTRY</h2>
-                            <p style={{ marginBottom: '12px', fontFamily: 'var(--font-lcd)', fontSize: '12px', color: 'var(--text-dim)' }}>
-                                CAN&apos;T SCAN? TYPE THE CODE MANUALLY:
+                        {/* Manual Entry */}
+                        <div className="card">
+                            <h2 className="card-title">▶ Manual Entry</h2>
+                            <p style={{
+                                marginBottom: '12px',
+                                fontFamily: 'var(--font-label)',
+                                fontSize: '11px',
+                                color: 'var(--light-gray)'
+                            }}>
+                                Can&apos;t scan? Type the code manually:
                             </p>
                             <form onSubmit={handleManualSubmit}>
                                 <div className="input-group">
@@ -352,10 +344,10 @@ export default function ScanPage() {
                                         placeholder="PL-XXX-XXX"
                                         value={manualCode}
                                         onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                                        style={{ textTransform: 'uppercase', letterSpacing: '2px' }}
+                                        style={{ textTransform: 'uppercase', letterSpacing: '3px' }}
                                     />
                                     <button type="submit" className="btn btn-secondary">
-                                        ▶ GO
+                                        ▶ Go
                                     </button>
                                 </div>
                             </form>

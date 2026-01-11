@@ -19,7 +19,6 @@ export default function Home() {
 
     if (errorType === 'not_found' && errorCode) {
       setError(`Code "${errorCode}" not found`);
-      // Clear URL params
       window.history.replaceState({}, '', '/');
     }
   }, []);
@@ -58,13 +57,11 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
-      // Haptic feedback on supported devices
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = code;
       document.body.appendChild(textArea);
@@ -91,20 +88,20 @@ export default function Home() {
     <div className="container">
       {/* Main Winamp Window */}
       <div className="winamp-window">
-        {/* Title Bar */}
+        {/* Title Bar - Metallic Header */}
         <div className="winamp-titlebar">
           <span className="winamp-titlebar-text">PAPERLINK</span>
           <div className="winamp-titlebar-buttons">
-            <div className="winamp-titlebar-btn">_</div>
+            <div className="winamp-titlebar-btn">−</div>
             <div className="winamp-titlebar-btn">□</div>
             <div className="winamp-titlebar-btn">×</div>
           </div>
         </div>
 
         <div className="winamp-content">
-          {/* LCD Header Display */}
-          <div className="lcd-display" style={{ margin: '4px', textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px' }}>
+          {/* LCD Display Header */}
+          <div className="lcd-display">
+            <div className="lcd-text lcd-text-medium" style={{ textAlign: 'center' }}>
               BRIDGE YOUR PAPER NOTES TO DIGITAL
             </div>
           </div>
@@ -112,22 +109,22 @@ export default function Home() {
           {/* Navigation Tabs */}
           <nav className="nav-tabs">
             <Link href="/" className="nav-tab active">
-              ✍️ WRITE
+              ✍️ Write
             </Link>
             <Link href="/scan" className="nav-tab">
-              📷 SCAN
+              📷 Scan
             </Link>
           </nav>
 
           {/* URL Input Card */}
           <div className="card">
-            <h2 className="card-title">▶ SHORTEN URL</h2>
+            <h2 className="card-title">▶ Shorten URL</h2>
             <form onSubmit={handleSubmit}>
               <div className="input-group">
                 <input
                   type="url"
                   className="input"
-                  placeholder="PASTE YOUR LONG URL HERE..."
+                  placeholder="Paste your long URL here..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   required
@@ -140,10 +137,10 @@ export default function Home() {
                   {isLoading ? (
                     <>
                       <span className="spinner"></span>
-                      GENERATING...
+                      Generating...
                     </>
                   ) : (
-                    '▶ GENERATE CODE'
+                    '▶ Generate Code'
                   )}
                 </button>
               </div>
@@ -161,10 +158,10 @@ export default function Home() {
           {/* Code Display */}
           {code && (
             <div className="card">
-              <h2 className="card-title">▶ YOUR HANDWRITING CODE</h2>
+              <h2 className="card-title">▶ Your Handwriting Code</h2>
               <div className="code-display">
                 <div className="code-text">{code}</div>
-                <p className="code-hint">WRITE THIS CODE IN YOUR NOTES</p>
+                <p className="code-hint">Write this code in your notes</p>
               </div>
 
               <div className="copy-row">
@@ -172,7 +169,7 @@ export default function Home() {
                   onClick={copyCode}
                   className={`btn ${copied ? 'btn-primary copy-success' : 'btn-secondary'} copy-btn`}
                 >
-                  {copied ? '✓ COPIED!' : '📋 COPY CODE'}
+                  {copied ? '✓ Copied!' : '📋 Copy Code'}
                 </button>
                 <button
                   onClick={copyShortUrl}
@@ -192,27 +189,32 @@ export default function Home() {
             </div>
           )}
 
-          {/* How it works */}
+          {/* How it works - Playlist style */}
           {!code && (
             <div className="card">
-              <h2 className="card-title">▶ HOW IT WORKS</h2>
-              <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-amber)', lineHeight: '1.8' }}>
-                <p style={{ marginBottom: '8px' }}>
-                  <span style={{ color: 'var(--lcd-text)' }}>1.</span> PASTE ANY URL ABOVE AND GET A SHORT CODE
-                </p>
-                <p style={{ marginBottom: '8px' }}>
-                  <span style={{ color: 'var(--lcd-text)' }}>2.</span> WRITE THE CODE IN YOUR PAPER NOTES
-                </p>
-                <p style={{ marginBottom: '8px' }}>
-                  <span style={{ color: 'var(--lcd-text)' }}>3.</span> LATER, USE THE{' '}
-                  <Link href="/scan" style={{ color: 'var(--lcd-text)', textDecoration: 'underline' }}>
-                    SCANNER
-                  </Link>{' '}
-                  TO SCAN YOUR HANDWRITING
-                </p>
-                <p>
-                  <span style={{ color: 'var(--lcd-text)' }}>4.</span> INSTANTLY OPEN THE LINKED URL!
-                </p>
+              <h2 className="card-title">▶ How It Works</h2>
+              <div style={{
+                background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)',
+                border: '1px solid #050a15',
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div className="playlist-item">
+                  <span><span style={{ color: '#00ffcc' }}>1.</span> Paste any URL above and get a short code</span>
+                </div>
+                <div className="playlist-item">
+                  <span><span style={{ color: '#00ffcc' }}>2.</span> Write the code in your paper notes</span>
+                </div>
+                <div className="playlist-item">
+                  <span><span style={{ color: '#00ffcc' }}>3.</span> Use the{' '}
+                    <Link href="/scan" style={{ color: '#00ffcc', textDecoration: 'underline' }}>
+                      Scanner
+                    </Link>{' '}to scan your handwriting
+                  </span>
+                </div>
+                <div className="playlist-item" style={{ borderBottom: 'none' }}>
+                  <span><span style={{ color: '#00ffcc' }}>4.</span> Instantly open the linked URL!</span>
+                </div>
               </div>
             </div>
           )}
