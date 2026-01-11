@@ -11,7 +11,7 @@ export default function ScanPage() {
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [statusText, setStatusText] = useState('');
     const [detectedCode, setDetectedCode] = useState('');
-    const [manualCode, setManualCode] = useState('');
+    const [manualCodeChars, setManualCodeChars] = useState(''); // Just the 6 characters (no PL- or dashes)
     const [cameraError, setCameraError] = useState('');
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
@@ -20,6 +20,7 @@ export default function ScanPage() {
     const workerRef = useRef<any>(null);
 
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
+    const validChars = '23456789ACDEFGHJKLMNPQRTUVWXY';
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -37,6 +38,23 @@ export default function ScanPage() {
             }
         };
     }, [stopCamera]);
+
+    // Format the 6 characters into PL-XXX-XXX format
+    const formatCode = (chars: string): string => {
+        const clean = chars.toUpperCase().replace(/[^23456789ACDEFGHJKLMNPQRTUVWXY]/g, '').slice(0, 6);
+        if (clean.length <= 3) {
+            return `PL-${clean}`;
+        }
+        return `PL-${clean.slice(0, 3)}-${clean.slice(3)}`;
+    };
+
+    // Get display format for the input
+    const getDisplayCode = (): string => {
+        const chars = manualCodeChars.toUpperCase();
+        const part1 = chars.slice(0, 3).padEnd(3, '_');
+        const part2 = chars.slice(3, 6).padEnd(3, '_');
+        return `PL-${part1}-${part2}`;
+    };
 
     // Handle detected code - INSTANT redirect
     const handleCodeDetected = async (code: string) => {
@@ -59,6 +77,7 @@ export default function ScanPage() {
                 setStatusText(`Code "${code}" not found. Try again.`);
                 setStatus('camera-ready');
                 setCapturedImage(null);
+                // Don't reset isVideoReady - camera should still be working
             }
         } catch (err) {
             console.error('Resolve error:', err);
@@ -113,8 +132,8 @@ export default function ScanPage() {
             // Draw only the cropped region
             ctx.drawImage(
                 video,
-                cropX, cropY, cropWidth, cropHeight,  // Source (crop area)
-                0, 0, cropWidth, cropHeight            // Destination (full canvas)
+                cropX, cropY, cropWidth, cropHeight,
+                0, 0, cropWidth, cropHeight
             );
 
             const croppedImage = canvas.toDataURL('image/png');
@@ -137,8 +156,7 @@ export default function ScanPage() {
             } else {
                 setStatusText('No code found. Position the code in the rectangle and try again.');
                 setStatus('camera-ready');
-                // Keep the captured image visible for a moment
-                setTimeout(() => setCapturedImage(null), 2000);
+                setTimeout(() => setCapturedImage(null), 1500);
             }
         } catch (err) {
             console.error('Capture error:', err);
@@ -150,8 +168,8 @@ export default function ScanPage() {
 
     // Handle video ready
     const handleVideoCanPlay = () => {
+        console.log('Video can play now');
         setIsVideoReady(true);
-        console.log('Video is ready to play');
     };
 
     // Start camera
@@ -182,7 +200,6 @@ export default function ScanPage() {
             const video = videoRef.current;
             if (video) {
                 video.srcObject = stream;
-                // Play is handled by autoPlay, but we call it anyway
                 try {
                     await video.play();
                 } catch (playError) {
@@ -190,23 +207,25 @@ export default function ScanPage() {
                 }
             }
 
-            // Initialize OCR worker
-            setStatusText('Loading OCR engine...');
+            // Initialize OCR worker if not already done
+            if (!workerRef.current) {
+                setStatusText('Loading OCR engine...');
 
-            const Tesseract = (await import('tesseract.js')).default;
-            const worker = await Tesseract.createWorker('eng', 1, {
-                logger: (m: any) => {
-                    if (m.status === 'recognizing text') {
-                        setStatusText(`Processing: ${Math.round(m.progress * 100)}%`);
-                    }
-                },
-            });
+                const Tesseract = (await import('tesseract.js')).default;
+                const worker = await Tesseract.createWorker('eng', 1, {
+                    logger: (m: any) => {
+                        if (m.status === 'recognizing text') {
+                            setStatusText(`Processing: ${Math.round(m.progress * 100)}%`);
+                        }
+                    },
+                });
 
-            await worker.setParameters({
-                tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-',
-            });
+                await worker.setParameters({
+                    tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-',
+                });
 
-            workerRef.current = worker;
+                workerRef.current = worker;
+            }
 
             setStatus('camera-ready');
             setStatusText('Position code in the rectangle, then tap Capture');
@@ -225,20 +244,31 @@ export default function ScanPage() {
         }
     };
 
+    // Handle manual code input - only accept valid characters
+    const handleManualInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const input = e.target.value.toUpperCase();
+        // Filter to only valid characters and limit to 6
+        const filtered = input.split('').filter(c => validChars.includes(c)).slice(0, 6).join('');
+        setManualCodeChars(filtered);
+    };
+
     // Handle manual code entry
     const handleManualSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!manualCode.trim()) return;
+        if (manualCodeChars.length !== 6) {
+            return;
+        }
 
-        const code = manualCode.toUpperCase().trim();
-        await handleCodeDetected(code);
+        const fullCode = `PL-${manualCodeChars.slice(0, 3)}-${manualCodeChars.slice(3, 6)}`;
+        await handleCodeDetected(fullCode);
     };
 
-    // Retake photo
+    // Retake photo - keep camera running
     const retakePhoto = () => {
         setCapturedImage(null);
         setStatus('camera-ready');
         setStatusText('Position code in the rectangle, then tap Capture');
+        // Camera and OCR worker are still running, no need to restart
     };
 
     const showCamera = status !== 'idle' && status !== 'error';
@@ -272,7 +302,7 @@ export default function ScanPage() {
                     </nav>
 
                     <main className="scanner-container">
-                        {/* Start Camera Button - only show when idle */}
+                        {/* Start Camera Button */}
                         {status === 'idle' && (
                             <div className="card text-center">
                                 <h2 className="card-title">▶ Camera Scanner</h2>
@@ -309,11 +339,10 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Camera View - ALWAYS render video element when camera is requested */}
+                        {/* Camera View */}
                         {showCamera && (
                             <>
                                 <div className="video-wrapper">
-                                    {/* Show captured image when available, otherwise show video */}
                                     {capturedImage ? (
                                         <img
                                             src={capturedImage}
@@ -334,6 +363,7 @@ export default function ScanPage() {
                                                 autoPlay
                                                 onCanPlay={handleVideoCanPlay}
                                                 onLoadedMetadata={handleVideoCanPlay}
+                                                onPlaying={handleVideoCanPlay}
                                                 style={{
                                                     width: '100%',
                                                     height: '100%',
@@ -350,7 +380,7 @@ export default function ScanPage() {
                                                     background: '#000'
                                                 }}>
                                                     <div style={{ textAlign: 'center' }}>
-                                                        <span className="spinner" style={{ marginBottom: '10px' }}></span>
+                                                        <span className="spinner"></span>
                                                         <div style={{
                                                             fontFamily: 'var(--font-lcd)',
                                                             fontSize: '14px',
@@ -414,7 +444,7 @@ export default function ScanPage() {
                             </>
                         )}
 
-                        {/* Manual Entry */}
+                        {/* Manual Entry - Auto-formatted */}
                         <div className="card">
                             <h2 className="card-title">▶ Manual Entry</h2>
                             <p style={{
@@ -423,20 +453,49 @@ export default function ScanPage() {
                                 fontSize: '11px',
                                 color: 'var(--light-gray)'
                             }}>
-                                Can&apos;t scan? Type the code manually:
+                                Type the 6 characters (no need to type PL- or dashes):
                             </p>
                             <form onSubmit={handleManualSubmit}>
                                 <div className="input-group">
+                                    {/* Display formatted code */}
+                                    <div style={{
+                                        fontFamily: 'var(--font-lcd)',
+                                        fontSize: '24px',
+                                        color: 'var(--lcd-text)',
+                                        textShadow: '0 0 8px var(--lcd-text)',
+                                        textAlign: 'center',
+                                        padding: '12px',
+                                        background: 'linear-gradient(180deg, var(--lcd-bg-light) 0%, var(--lcd-bg-dark) 100%)',
+                                        border: '2px solid var(--shadow-deep)',
+                                        borderRadius: '3px',
+                                        letterSpacing: '4px',
+                                        marginBottom: '10px'
+                                    }}>
+                                        {getDisplayCode()}
+                                    </div>
                                     <input
                                         type="text"
                                         className="input"
-                                        placeholder="PL-XXX-XXX"
-                                        value={manualCode}
-                                        onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                                        style={{ textTransform: 'uppercase', letterSpacing: '3px' }}
+                                        placeholder="Type 6 characters..."
+                                        value={manualCodeChars}
+                                        onChange={handleManualInput}
+                                        maxLength={6}
+                                        style={{
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '3px',
+                                            textAlign: 'center',
+                                            fontSize: '18px'
+                                        }}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="characters"
                                     />
-                                    <button type="submit" className="btn btn-secondary">
-                                        ▶ Go
+                                    <button
+                                        type="submit"
+                                        className="btn btn-primary"
+                                        disabled={manualCodeChars.length !== 6}
+                                    >
+                                        {manualCodeChars.length === 6 ? '▶ Go' : `${manualCodeChars.length}/6 chars`}
                                     </button>
                                 </div>
                             </form>

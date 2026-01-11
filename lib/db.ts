@@ -13,6 +13,14 @@ const supabase = supabaseUrl && supabaseKey
     ? createClient(supabaseUrl, supabaseKey)
     : null;
 
+// Log database status
+if (supabase) {
+    console.log('✅ Database: Connected to Supabase');
+} else {
+    console.log('⚠️ Database: Using in-memory storage (data will be lost on restart)');
+    console.log('   To persist data, set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+}
+
 // Fallback in-memory storage if Supabase not configured
 const memoryLinks = new Map<string, Link>();
 let memoryIdCounter = 1;
