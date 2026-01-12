@@ -5,7 +5,7 @@ import { createLink, codeExists } from '@/lib/db';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { url } = body;
+        const { url, userId } = body;
 
         // Validate URL
         if (!url || typeof url !== 'string') {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create the link
-        const link = await createLink(shortCode, url);
+        const link = await createLink(shortCode, url, userId);
 
         // Build the short URL
         const host = request.headers.get('host') || 'localhost:3000';

@@ -32,19 +32,26 @@ export interface Link {
     created_at: string;
     click_count: number;
     last_accessed: string | null;
+    user_id?: string;
 }
 
 /**
  * Create a new shortened link
  */
-export async function createLink(shortCode: string, originalUrl: string): Promise<Link> {
+export async function createLink(shortCode: string, originalUrl: string, userId?: string): Promise<Link> {
     if (supabase) {
+        const payload: any = {
+            short_code: shortCode,
+            original_url: originalUrl,
+        };
+
+        if (userId) {
+            payload.user_id = userId;
+        }
+
         const { data, error } = await supabase
             .from('links')
-            .insert({
-                short_code: shortCode,
-                original_url: originalUrl,
-            })
+            .insert(payload)
             .select()
             .single();
 
@@ -64,6 +71,7 @@ export async function createLink(shortCode: string, originalUrl: string): Promis
         created_at: new Date().toISOString(),
         click_count: 0,
         last_accessed: null,
+        user_id: userId // Save in memory too
     };
     memoryLinks.set(shortCode, link);
     return link;

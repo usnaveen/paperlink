@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AuthButton from '@/components/AuthButton';
+import { getUser } from '@/lib/auth';
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -11,8 +12,14 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [userId, setUserId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    // Check for user
+    getUser().then(user => {
+      if (user) setUserId(user.id);
+    });
+
     const params = new URLSearchParams(window.location.search);
     const errorType = params.get('error');
     const errorCode = params.get('code');
@@ -35,7 +42,10 @@ export default function Home() {
       const response = await fetch('/api/shorten', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({
+          url: url.trim(),
+          userId: userId
+        }),
       });
 
       const data = await response.json();
