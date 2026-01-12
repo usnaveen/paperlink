@@ -153,36 +153,81 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not get canvas context');
 
-            // Exact Crop Logic with Zoom/Mask support
-            const videoRect = video.getBoundingClientRect();
+            // 1. Calculate the actual Rendered Dimensions of the video (cover fit)
+            const videoRatio = video.videoWidth / video.videoHeight;
+            const elementRatio = video.getBoundingClientRect().width / video.getBoundingClientRect().height; // Visual element size
+
+            let renderedWidth, renderedHeight;
+            let offsetX, offsetY;
+
+            // Note: We use the video element's client dimensions as the "container"
+            const containerWidth = video.getBoundingClientRect().width;
+            const containerHeight = video.getBoundingClientRect().height;
+
+            if (videoRatio > elementRatio) {
+                // Video is wider than container: Covers height, crops width
+                renderedHeight = containerHeight;
+                renderedWidth = containerHeight * videoRatio;
+                offsetX = (renderedWidth - containerWidth) / 2;
+                offsetY = 0;
+            } else {
+                // Video is taller than container: Covers width, crops height
+                renderedWidth = containerWidth;
+                renderedHeight = containerWidth / videoRatio;
+                offsetX = 0;
+                offsetY = (renderedHeight - containerHeight) / 2;
+            }
+
+            // 2. Map the Overlay (Box) visual coordinates to the Source Video coordinates
             const overlayRect = overlay.getBoundingClientRect();
+            const videoRect = video.getBoundingClientRect(); // The DOM element
 
-            // Calculate ratios to map visually displayed pixels to native video pixels
-            // videoRect includes the CSS scale transform, so this logic remains robust
-            const scaleX = video.videoWidth / videoRect.width;
-            const scaleY = video.videoHeight / videoRect.height;
+            // Where is the box relative to the DOM element top-left?
+            const boxVisualX = overlayRect.left - videoRect.left;
+            const boxVisualY = overlayRect.top - videoRect.top;
 
-            const relativeCropX = overlayRect.left - videoRect.left;
-            const relativeCropY = overlayRect.top - videoRect.top;
+            // Where is the box relative to the "Rendered Video" top-left? (Adding the cropped-out part)
+            const boxHereX = boxVisualX + offsetX;
+            const boxHereY = boxVisualY + offsetY;
 
-            const cropX = relativeCropX * scaleX;
-            const cropY = relativeCropY * scaleY;
-            const cropWidth = overlayRect.width * scaleX;
-            const cropHeight = overlayRect.height * scaleY;
+            // Scale factor: Source Pixels per Rendered Pixel
+            const scale = video.videoWidth / renderedWidth;
 
-            canvas.width = cropWidth;
-            canvas.height = cropHeight;
+            const sourceX = boxHereX * scale;
+            const sourceY = boxHereY * scale;
+            const sourceW = overlayRect.width * scale;
+            const sourceH = overlayRect.height * scale;
 
-            // Draw original for OCR
-            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            // Set canvas size to the cropped size (High Res)
+            canvas.width = sourceW;
+            canvas.height = sourceH;
 
-            // 1. Process for OCR (Adaptive Threshold for Flash/Glare)
-            const ocrImage = preprocessImage(canvas);
+            // Draw original cropped image
+            ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
 
-            // 2. Process for Display (Digitize Animation)
-            // Redraw original to canvas to reset effects for display processing
-            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-            applyDigitalTheme(ctx, cropWidth, cropHeight);
+            // 3. Process for OCR (Resize & Contrast)
+            // Tesseract works best when text height is roughly 20-30px.
+            // Our crop might be huge (e.g. 500px wide).
+            // Let's create a temporary smaller canvas for OCR
+            const ocrCanvas = document.createElement('canvas');
+            const ocrHeight = 60; // Target height for text line
+            const ocrWidth = sourceW * (ocrHeight / sourceH);
+            ocrCanvas.width = ocrWidth + 40; // Add padding
+            ocrCanvas.height = ocrHeight + 40;
+            const ocrCtx = ocrCanvas.getContext('2d');
+
+            if (ocrCtx) {
+                ocrCtx.fillStyle = '#FFFFFF';
+                ocrCtx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+                ocrCtx.drawImage(canvas, 0, 0, sourceW, sourceH, 20, 20, ocrWidth, ocrHeight);
+            }
+
+            const ocrImage = preprocessImage(ocrCanvas.width > 0 ? ocrCanvas : canvas);
+
+            // 4. Process for Display (Digitize Animation) - Use the visible canvas
+            // Re-draw clean image
+            ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+            applyDigitalTheme(ctx, sourceW, sourceH);
             const displayImage = canvas.toDataURL('image/png');
 
             setCapturedImage(displayImage);
@@ -193,12 +238,15 @@ export default function ScanPage() {
             // Run OCR on the high-contrast version
             const result = await workerRef.current.recognize(ocrImage);
             const text = result.data.text.toUpperCase();
-            console.log('OCR Result:', text);
+            console.log('OCR Raw:', text);
 
-            const matches = text.match(codePattern);
+            // Clean up common misreadings
+            const cleanText = text.replace(/[^A-Z0-9-]/g, '');
+            console.log('Cleaned:', cleanText);
+
+            const matches = cleanText.match(codePattern);
 
             if (matches && matches.length > 0) {
-                // Artificial delay to show off the "Digitize" animation
                 setTimeout(() => {
                     handleCodeDetected(matches[0].toUpperCase());
                 }, 800);
@@ -274,7 +322,7 @@ export default function ScanPage() {
         }
     };
 
-    // Advanced Adaptive Thresholding (Integral Image) for Flash/Glare handling
+    // Advanced Adaptive Thresholding (Integral Image) - Optimized
     const preprocessImage = (canvas: HTMLCanvasElement): string => {
         const ctx = canvas.getContext('2d');
         if (!ctx) return canvas.toDataURL('image/png');
@@ -285,15 +333,26 @@ export default function ScanPage() {
         const data = imageData.data;
         const grayData = new Uint8Array(width * height);
 
-        // 1. Convert to Grayscale
+        // 1. Convert to Grayscale & Contrast Stretch
+        let min = 255, max = 0;
         for (let i = 0; i < width * height; i++) {
             const r = data[i * 4];
             const g = data[i * 4 + 1];
             const b = data[i * 4 + 2];
-            grayData[i] = (r * 299 + g * 587 + b * 114) / 1000;
+            const gray = (r * 299 + g * 587 + b * 114) / 1000;
+            grayData[i] = gray;
+            if (gray < min) min = gray;
+            if (gray > max) max = gray;
         }
 
-        // 2. Compute Integral Image for fast local mean calculation
+        // Contrast Stretch
+        if (max > min) {
+            for (let i = 0; i < width * height; i++) {
+                grayData[i] = ((grayData[i] - min) / (max - min)) * 255;
+            }
+        }
+
+        // 2. Compute Integral Image
         const integral = new Uint32Array(width * height);
         for (let y = 0; y < height; y++) {
             let sum = 0;
@@ -308,20 +367,18 @@ export default function ScanPage() {
         }
 
         // 3. Adaptive Thresholding
-        const windowSize = 20; // Size of local neighborhood
-        const C = 15; // Constant to subtract from mean (Sensitivity)
+        const windowSize = Math.max(10, Math.floor(width / 20)); // Adaptive window size
+        const C = 10;
         const halfSize = Math.floor(windowSize / 2);
 
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                // Calculate local mean
                 const x1 = Math.max(0, x - halfSize);
                 const y1 = Math.max(0, y - halfSize);
                 const x2 = Math.min(width - 1, x + halfSize);
                 const y2 = Math.min(height - 1, y + halfSize);
 
                 const count = (x2 - x1 + 1) * (y2 - y1 + 1);
-
                 const br = integral[y2 * width + x2];
                 const tl = (x1 > 0 && y1 > 0) ? integral[(y1 - 1) * width + (x1 - 1)] : 0;
                 const tr = (y1 > 0) ? integral[(y1 - 1) * width + x2] : 0;
@@ -330,8 +387,8 @@ export default function ScanPage() {
                 const sum = br - tr - bl + tl;
                 const mean = sum / count;
 
-                const val = grayData[y * width + x];
-                const binary = val < (mean - C) ? 0 : 255; // Darker than local mean = Ink
+                // Simple Binarization
+                const binary = grayData[y * width + x] < (mean - C) ? 0 : 255;
 
                 const idx = (y * width + x) * 4;
                 data[idx] = binary;
