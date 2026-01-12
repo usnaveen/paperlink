@@ -5,20 +5,19 @@ import Link from 'next/link';
 import AuthButton from '@/components/AuthButton';
 import { getUser } from '@/lib/auth';
 
-// LCD Blue Theme for Dot Matrix
+// Theme Constants
 const LCD_THEME = {
   bg: '#0055aa',
-  dotInactive: 'rgba(255, 255, 255, 0.2)',
+  dotInactive: 'rgba(255, 255, 255, 0.15)',
   dotActive: '#ffffff',
-  glow: '0 0 4px #ffffff'
+  glow: '0 0 8px #ffffff, 0 0 2px #ffffff'
 };
 
-// Green Theme for Code Display
 const CODE_THEME = {
   bg: '#001100',
-  dotInactive: 'rgba(0, 255, 0, 0.15)',
+  dotInactive: 'rgba(0, 255, 0, 0.1)',
   dotActive: '#00ff00',
-  glow: '0 0 8px #00ff00'
+  glow: '0 0 12px #00ff00, 0 0 4px #00ff00'
 };
 
 export default function Home() {
@@ -97,31 +96,107 @@ export default function Home() {
     }
   };
 
-  // Dot Matrix Display Style
-  const dotMatrixStyle = (theme: typeof LCD_THEME) => ({
-    background: theme.bg,
-    backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1.5px, transparent 2px)`,
-    backgroundSize: '6px 6px',
-    borderRadius: '4px',
-    border: '2px solid rgba(0,0,0,0.3)',
-    boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
-    padding: '16px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60px'
-  });
+  // Functional Dot Matrix Display - dots that "light up" for text
+  const DotMatrixDisplay = ({ text, theme, fontSize = '16px', bold = false }: {
+    text: string,
+    theme: typeof LCD_THEME,
+    fontSize?: string,
+    bold?: boolean
+  }) => (
+    <div style={{
+      background: theme.bg,
+      borderRadius: '6px',
+      border: '3px solid rgba(0,0,0,0.4)',
+      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.1)',
+      padding: '16px 20px',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      {/* Base dot grid layer - always visible as "off" dots */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1px, transparent 1px)`,
+        backgroundSize: '4px 4px',
+        opacity: 0.8
+      }} />
+      {/* Text layer - appears as "lit up" dots */}
+      <div style={{
+        position: 'relative',
+        fontFamily: '"Doto", monospace',
+        fontSize: fontSize,
+        fontWeight: bold ? 900 : 700,
+        color: theme.dotActive,
+        textShadow: theme.glow,
+        textAlign: 'center',
+        letterSpacing: '2px',
+        whiteSpace: 'nowrap',
+        // Create dot-like appearance for text
+        backgroundImage: `radial-gradient(circle, ${theme.dotActive} 1.5px, transparent 1.5px)`,
+        backgroundSize: '4px 4px',
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        // Keep color for glow effect
+        WebkitTextFillColor: theme.dotActive
+      }}>
+        {text}
+      </div>
+    </div>
+  );
 
-  const dotMatrixTextStyle = (theme: typeof LCD_THEME, size: string = '14px', bold: boolean = false) => ({
-    fontFamily: 'var(--font-doto)',
-    fontSize: size,
-    fontWeight: bold ? 900 : 700,
-    color: theme.dotActive,
-    textShadow: theme.glow,
-    textAlign: 'center' as const,
-    letterSpacing: '1px',
-    wordBreak: 'break-word' as const
-  });
+  // Glittering code display
+  const GlitterCodeDisplay = ({ code, theme }: { code: string, theme: typeof LCD_THEME }) => (
+    <>
+      <style>{`
+                @keyframes glitter {
+                    0%, 100% { opacity: 1; filter: brightness(1); }
+                    50% { opacity: 0.9; filter: brightness(1.3); }
+                }
+                .glitter-code {
+                    animation: glitter 1.2s ease-in-out infinite;
+                }
+            `}</style>
+      <div
+        className="glitter-code"
+        style={{
+          background: theme.bg,
+          borderRadius: '6px',
+          border: '3px solid rgba(0,0,0,0.4)',
+          boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
+          padding: '20px',
+          position: 'relative',
+          cursor: 'pointer'
+        }}
+        onClick={copyCode}
+        title="Click to copy"
+      >
+        {/* Base dot grid */}
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1px, transparent 1px)`,
+          backgroundSize: '4px 4px',
+          opacity: 0.8
+        }} />
+        {/* Code text */}
+        <div style={{
+          position: 'relative',
+          fontFamily: '"Doto", monospace',
+          fontSize: '28px',
+          fontWeight: 900,
+          color: theme.dotActive,
+          textShadow: theme.glow,
+          textAlign: 'center',
+          letterSpacing: '3px'
+        }}>
+          {code}
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <div className="container" style={{
@@ -130,31 +205,21 @@ export default function Home() {
       minHeight: '100vh',
       justifyContent: 'center'
     }}>
-      {/* Glitter Animation Keyframes */}
-      <style>{`
-                @keyframes glitter {
-                    0%, 100% { opacity: 1; text-shadow: 0 0 8px #00ff00; }
-                    50% { opacity: 0.85; text-shadow: 0 0 16px #00ff00, 0 0 24px #00ff00; }
-                }
-                .glitter-text {
-                    animation: glitter 1.5s ease-in-out infinite;
-                }
-            `}</style>
-
       <div className="winamp-window">
-        {/* Title Bar with Auth */}
+        {/* Title Bar */}
         <div className="winamp-titlebar">
           <span className="winamp-titlebar-text">PAPERLINK</span>
           <AuthButton />
         </div>
 
         <div className="winamp-content">
-          {/* Dot Matrix Display at Top */}
-          <div style={dotMatrixStyle(LCD_THEME)}>
-            <div style={dotMatrixTextStyle(LCD_THEME, '18px', true)}>
-              BRIDGE PAPER NOTES TO DIGITAL
-            </div>
-          </div>
+          {/* Dot Matrix Header - Single Line, Bold */}
+          <DotMatrixDisplay
+            text="BRIDGE PAPER NOTES TO DIGITAL"
+            theme={LCD_THEME}
+            fontSize="14px"
+            bold={true}
+          />
 
           {/* URL Input */}
           <div className="card">
@@ -190,18 +255,7 @@ export default function Home() {
           {code && (
             <div className="card">
               <h2 className="card-title">▶ Generated Code</h2>
-              {/* Dot Matrix Code Display with Glitter */}
-              <div style={dotMatrixStyle(CODE_THEME)}>
-                <div
-                  className="glitter-text"
-                  style={{ ...dotMatrixTextStyle(CODE_THEME, '28px'), cursor: 'pointer' }}
-                  onClick={copyCode}
-                  title="Click to copy"
-                >
-                  {code}
-                </div>
-              </div>
-
+              <GlitterCodeDisplay code={code} theme={CODE_THEME} />
               <div className="copy-row" style={{ marginTop: '12px' }}>
                 <button
                   onClick={copyCode}
@@ -214,18 +268,38 @@ export default function Home() {
             </div>
           )}
 
-          {/* Collapsible How It Works */}
+          {/* Collapsible How It Works - No border when closed */}
           {!code && (
-            <div className="card">
+            <div
+              style={{
+                marginTop: '12px',
+                background: howItWorksOpen ? 'linear-gradient(180deg, var(--metal-mid) 0%, var(--metal-darker) 100%)' : 'transparent',
+                border: howItWorksOpen ? '1px solid var(--border-dark)' : 'none',
+                borderRadius: '4px',
+                padding: howItWorksOpen ? '12px' : '8px 0'
+              }}
+            >
               <h2
                 className="card-title"
                 onClick={() => setHowItWorksOpen(!howItWorksOpen)}
-                style={{ cursor: 'pointer', userSelect: 'none' }}
+                style={{
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  margin: 0,
+                  padding: howItWorksOpen ? 0 : '4px 12px',
+                  color: '#b8c0cc'
+                }}
               >
                 {howItWorksOpen ? '▼' : '▶'} How It Works
               </h2>
               {howItWorksOpen && (
-                <div style={{ background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)', border: '1px solid #050a15', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{
+                  background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)',
+                  border: '1px solid #050a15',
+                  borderRadius: '3px',
+                  overflow: 'hidden',
+                  marginTop: '12px'
+                }}>
                   <div className="playlist-item">
                     <span><span style={{ color: '#00ffcc' }}>1.</span> Paste any URL above and get a short code</span>
                   </div>
@@ -243,7 +317,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Navigation Tabs (Below Content, Not Fixed) */}
+          {/* Navigation Tabs */}
           <nav className="nav-tabs" style={{ marginTop: '12px' }}>
             <Link href="/" className="nav-tab active">Write</Link>
             <Link href="/scan" className="nav-tab">Scan</Link>
@@ -251,7 +325,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Version Number */}
+      {/* Version */}
       <div style={{
         textAlign: 'center',
         padding: '8px',
