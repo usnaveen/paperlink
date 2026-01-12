@@ -117,13 +117,15 @@ export default function ScanPage() {
             canvas.height = cropHeight;
             ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
-            const croppedImage = canvas.toDataURL('image/png');
-            setCapturedImage(croppedImage);
+            // Apply Pre-processing (Grayscale + Binary)
+            const processedImage = preprocessImage(canvas);
+
+            setCapturedImage(processedImage);
 
             setStatus('processing');
             setStatusText('Analyzing...');
 
-            const result = await workerRef.current.recognize(croppedImage);
+            const result = await workerRef.current.recognize(processedImage);
             const text = result.data.text.toUpperCase();
             console.log('OCR Result:', text);
 
@@ -175,9 +177,13 @@ export default function ScanPage() {
 
             if (!workerRef.current) {
                 setStatusText('Loading OCR engine...');
-                const Tesseract = (await import('tesseract.js')).default;
+                const { default: Tesseract, PSM } = await import('tesseract.js');
                 const worker = await Tesseract.createWorker('eng', 1);
-                await worker.setParameters({ tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-' });
+                // PSM 7 = Treat the image as a single text line.
+                await worker.setParameters({
+                    tessedit_char_whitelist: 'PLABCDEFGHJKLMNQRTUVWXY23456789-',
+                    tessedit_pageseg_mode: PSM.SINGLE_LINE,
+                });
                 workerRef.current = worker;
             }
 
@@ -188,6 +194,33 @@ export default function ScanPage() {
             setCameraError(msg.includes('Permission') ? 'Camera permission denied.' : `Camera error: ${msg}`);
             setStatus('error');
         }
+    };
+
+    const preprocessImage = (canvas: HTMLCanvasElement): string => {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return canvas.toDataURL('image/png');
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Binarization threshold (adjust 0-255)
+        const threshold = 110;
+
+        for (let i = 0; i < data.length; i += 4) {
+            // Grayscale
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+            // Simple Binarization (High Contrast)
+            const val = gray > threshold ? 255 : 0;
+
+            data[i] = val;     // R
+            data[i + 1] = val; // G
+            data[i + 2] = val; // B
+            // Alpha (data[i+3]) remains 255
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        return canvas.toDataURL('image/png');
     };
 
     // Handle keyboard input for manual code
