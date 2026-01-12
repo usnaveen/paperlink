@@ -153,20 +153,18 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not get canvas context');
 
-            // Exact Crop Logic
-            // 1. Get relative size of video element vs intrinsic video
+            // Exact Crop Logic with Zoom/Mask support
             const videoRect = video.getBoundingClientRect();
             const overlayRect = overlay.getBoundingClientRect();
 
             // Calculate ratios to map visually displayed pixels to native video pixels
+            // videoRect includes the CSS scale transform, so this logic remains robust
             const scaleX = video.videoWidth / videoRect.width;
             const scaleY = video.videoHeight / videoRect.height;
 
-            // Calculate crop position relative to the video element
             const relativeCropX = overlayRect.left - videoRect.left;
             const relativeCropY = overlayRect.top - videoRect.top;
 
-            // Map to intrinsic coordinates
             const cropX = relativeCropX * scaleX;
             const cropY = relativeCropY * scaleY;
             const cropWidth = overlayRect.width * scaleX;
@@ -178,7 +176,7 @@ export default function ScanPage() {
             // Draw original for OCR
             ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
-            // 1. Process for OCR (High Contrast)
+            // 1. Process for OCR (Adaptive Threshold for Flash/Glare)
             const ocrImage = preprocessImage(canvas);
 
             // 2. Process for Display (Digitize Animation)
@@ -276,27 +274,70 @@ export default function ScanPage() {
         }
     };
 
+    // Advanced Adaptive Thresholding (Integral Image) for Flash/Glare handling
     const preprocessImage = (canvas: HTMLCanvasElement): string => {
         const ctx = canvas.getContext('2d');
         if (!ctx) return canvas.toDataURL('image/png');
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const width = canvas.width;
+        const height = canvas.height;
+        const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
+        const grayData = new Uint8Array(width * height);
 
-        // Binarization threshold (adjust 0-255)
-        const threshold = 110;
+        // 1. Convert to Grayscale
+        for (let i = 0; i < width * height; i++) {
+            const r = data[i * 4];
+            const g = data[i * 4 + 1];
+            const b = data[i * 4 + 2];
+            grayData[i] = (r * 299 + g * 587 + b * 114) / 1000;
+        }
 
-        for (let i = 0; i < data.length; i += 4) {
-            // Grayscale
-            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        // 2. Compute Integral Image for fast local mean calculation
+        const integral = new Uint32Array(width * height);
+        for (let y = 0; y < height; y++) {
+            let sum = 0;
+            for (let x = 0; x < width; x++) {
+                sum += grayData[y * width + x];
+                if (y === 0) {
+                    integral[y * width + x] = sum;
+                } else {
+                    integral[y * width + x] = integral[(y - 1) * width + x] + sum;
+                }
+            }
+        }
 
-            // Simple Binarization (High Contrast)
-            const val = gray > threshold ? 255 : 0;
+        // 3. Adaptive Thresholding
+        const windowSize = 20; // Size of local neighborhood
+        const C = 15; // Constant to subtract from mean (Sensitivity)
+        const halfSize = Math.floor(windowSize / 2);
 
-            data[i] = val;     // R
-            data[i + 1] = val; // G
-            data[i + 2] = val; // B
-            // Alpha (data[i+3]) remains 255
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                // Calculate local mean
+                const x1 = Math.max(0, x - halfSize);
+                const y1 = Math.max(0, y - halfSize);
+                const x2 = Math.min(width - 1, x + halfSize);
+                const y2 = Math.min(height - 1, y + halfSize);
+
+                const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+                const br = integral[y2 * width + x2];
+                const tl = (x1 > 0 && y1 > 0) ? integral[(y1 - 1) * width + (x1 - 1)] : 0;
+                const tr = (y1 > 0) ? integral[(y1 - 1) * width + x2] : 0;
+                const bl = (x1 > 0) ? integral[y2 * width + (x1 - 1)] : 0;
+
+                const sum = br - tr - bl + tl;
+                const mean = sum / count;
+
+                const val = grayData[y * width + x];
+                const binary = val < (mean - C) ? 0 : 255; // Darker than local mean = Ink
+
+                const idx = (y * width + x) * 4;
+                data[idx] = binary;
+                data[idx + 1] = binary;
+                data[idx + 2] = binary;
+            }
         }
 
         ctx.putImageData(imageData, 0, 0);
@@ -381,100 +422,122 @@ export default function ScanPage() {
                             </div>
                         )}
 
-                        {/* Camera View */}
+                        {/* Camera View - "Sniper" Masked View */}
                         {showCamera && (
                             <>
-                                <div className="video-wrapper" style={{ position: 'relative' }}>
-                                    {capturedImage ? (
-                                        <div style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            background: '#1f3699',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            animation: 'fadeIn 0.5s ease-out'
-                                        }}>
-                                            <img
-                                                src={capturedImage}
-                                                alt="Digitized"
-                                                style={{
-                                                    maxWidth: '80%',
-                                                    maxHeight: '80%',
-                                                    boxShadow: '0 0 20px #00ffcc',
-                                                    border: '2px solid #00ffcc',
-                                                    imageRendering: 'pixelated'
-                                                }}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <video
-                                                ref={videoRef}
-                                                playsInline muted autoPlay
-                                                onCanPlay={handleVideoCanPlay}
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                            />
-                                            {/* Exact Crop Overlay */}
-                                            <div
-                                                ref={overlayRef}
-                                                className="scan-overlay"
-                                                style={{
-                                                    // Ensure overlay is strictly positioned
-                                                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.7)' // Dim outside area
-                                                }}
-                                            />
-
-                                            {hasFlash && (
-                                                <button
-                                                    onClick={toggleFlash}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    marginBottom: '20px',
+                                    position: 'relative',
+                                    zIndex: 1,
+                                    marginTop: '20px'
+                                }}>
+                                    {/* Mask Container - Only this part is visible */}
+                                    <div
+                                        ref={overlayRef}
+                                        style={{
+                                            width: '280px',
+                                            height: '90px',
+                                            border: '2px solid #00ffcc',
+                                            position: 'relative',
+                                            overflow: 'hidden', // MASKING THE REST
+                                            borderRadius: '4px',
+                                            boxShadow: '0 0 15px rgba(0, 255, 204, 0.3)',
+                                            background: '#000'
+                                        }}
+                                    >
+                                        {capturedImage ? (
+                                            <div style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                background: '#1f3699',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                animation: 'fadeIn 0.5s ease-out'
+                                            }}>
+                                                <img
+                                                    src={capturedImage}
+                                                    alt="Digitized"
                                                     style={{
-                                                        position: 'absolute',
-                                                        top: '10px',
-                                                        right: '10px',
-                                                        background: flashOn ? '#ffcc00' : 'rgba(0,0,0,0.5)',
-                                                        border: '2px solid #fff',
-                                                        borderRadius: '50%',
-                                                        width: '40px',
-                                                        height: '40px',
-                                                        color: flashOn ? '#000' : '#fff',
-                                                        fontSize: '20px',
-                                                        cursor: 'pointer',
-                                                        zIndex: 10
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        objectFit: 'fill', // Stretch to fit the box exactly
+                                                        imageRendering: 'pixelated'
                                                     }}
-                                                >
-                                                    ⚡️
-                                                </button>
-                                            )}
-                                        </>
+                                                />
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Video with Digital Zoom */}
+                                                <video
+                                                    ref={videoRef}
+                                                    playsInline muted autoPlay
+                                                    onCanPlay={handleVideoCanPlay}
+                                                    style={{
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        objectFit: 'cover',
+                                                        transform: 'scale(1.5)', // DIGITAL ZOOM
+                                                        transformOrigin: 'center center'
+                                                    }}
+                                                />
+
+                                                {/* Loading Spinner Over Video */}
+                                                {status === 'initializing' && (
+                                                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
+                                                        <span className="spinner"></span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Flash Toggle - Positioned relative to the mask */}
+                                    {hasFlash && !capturedImage && (
+                                        <button
+                                            onClick={toggleFlash}
+                                            style={{
+                                                position: 'absolute',
+                                                right: '0',
+                                                top: '-40px', // Above the box
+                                                background: flashOn ? '#ffcc00' : 'rgba(0,0,0,0.3)',
+                                                border: '1px solid #fff',
+                                                borderRadius: '4px',
+                                                width: '32px',
+                                                height: '32px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '16px' }}>⚡️</span>
+                                        </button>
                                     )}
-                                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                                </div>
+                                {/* Instruction Text under box */}
+                                <div style={{ textAlign: 'center', marginBottom: '20px', fontSize: '12px', color: '#b8c0cc' }}>
+                                    {status === 'camera-ready' ? 'Center code in box & Capture' : statusText}
                                 </div>
 
                                 <div className={`scan-status ${status === 'detected' ? 'detected' : ''}`}>
                                     {status === 'camera-ready' && !capturedImage && (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-                                            <span>{statusText}</span>
-                                            <button onClick={captureAndProcess} className="btn btn-primary" disabled={!isVideoReady}>
-                                                {isVideoReady ? '📸 Capture & Scan' : '⏳ Loading...'}
-                                            </button>
-                                        </div>
+                                        <button onClick={captureAndProcess} className="btn btn-primary" disabled={!isVideoReady} style={{ width: '200px', margin: '0 auto', display: 'block' }}>
+                                            {isVideoReady ? '📸 Capture' : '⏳ Loading...'}
+                                        </button>
                                     )}
-                                    {(status === 'capturing' || status === 'processing') && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center' }}>
-                                            <span className="spinner"></span>
-                                            <span>{statusText}</span>
-                                        </div>
-                                    )}
+
                                     {status === 'detected' && (
-                                        <div>
-                                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>✅ {statusText}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--light-gray)' }}>Redirecting...</div>
+                                        <div style={{ textAlign: 'center' }}>
+                                            <div style={{ fontSize: '16px', marginBottom: '8px', color: '#00ffcc' }}>✅ {detectedCode}</div>
                                         </div>
                                     )}
                                 </div>
                             </>
                         )}
+                        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
                         {/* Manual Entry - Single editable input */}
                         <div className="card">
