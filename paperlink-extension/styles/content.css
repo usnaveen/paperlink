@@ -1,0 +1,119 @@
+/* PaperLink Content Script Styles */
+/* Floating overlay at bottom-right corner */
+
+#paperlink-overlay {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2147483647;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    animation: paperlink-slide-in 0.3s ease;
+}
+
+@keyframes paperlink-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#paperlink-overlay.paperlink-fade-out {
+    animation: paperlink-slide-out 0.5s ease forwards;
+}
+
+@keyframes paperlink-slide-out {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+}
+
+.paperlink-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #1a1a24 0%, #252532 100%);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 16px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 0 24px rgba(99, 102, 241, 0.2);
+    backdrop-filter: blur(12px);
+}
+
+.paperlink-icon {
+    font-size: 20px;
+}
+
+.paperlink-label {
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.paperlink-code {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #818cf8;
+    letter-spacing: 2px;
+    background: rgba(99, 102, 241, 0.1);
+    padding: 6px 12px;
+    border-radius: 8px;
+}
+
+.paperlink-copy,
+.paperlink-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.paperlink-copy:hover {
+    background: #6366f1;
+    color: white;
+}
+
+.paperlink-close:hover {
+    background: #ef4444;
+    color: white;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 480px) {
+    #paperlink-overlay {
+        bottom: 16px;
+        right: 16px;
+        left: 16px;
+    }
+
+    .paperlink-content {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .paperlink-label {
+        display: none;
+    }
+}

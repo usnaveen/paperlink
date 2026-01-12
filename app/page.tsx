@@ -5,6 +5,22 @@ import Link from 'next/link';
 import AuthButton from '@/components/AuthButton';
 import { getUser } from '@/lib/auth';
 
+// LCD Blue Theme for Dot Matrix
+const LCD_THEME = {
+  bg: '#0055aa',
+  dotInactive: 'rgba(255, 255, 255, 0.2)',
+  dotActive: '#ffffff',
+  glow: '0 0 4px #ffffff'
+};
+
+// Green Theme for Code Display
+const CODE_THEME = {
+  bg: '#001100',
+  dotInactive: 'rgba(0, 255, 0, 0.15)',
+  dotActive: '#00ff00',
+  glow: '0 0 8px #00ff00'
+};
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [code, setCode] = useState('');
@@ -88,8 +104,40 @@ export default function Home() {
     } catch { }
   };
 
+  // Dot Matrix Display Style
+  const dotMatrixStyle = (theme: typeof LCD_THEME) => ({
+    background: theme.bg,
+    backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1.5px, transparent 2px)`,
+    backgroundSize: '6px 6px',
+    borderRadius: '4px',
+    border: '2px solid rgba(0,0,0,0.3)',
+    boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
+    padding: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '60px'
+  });
+
+  const dotMatrixTextStyle = (theme: typeof LCD_THEME, size: string = '14px') => ({
+    fontFamily: 'var(--font-doto)',
+    fontSize: size,
+    fontWeight: 700,
+    color: theme.dotActive,
+    textShadow: theme.glow,
+    textAlign: 'center' as const,
+    letterSpacing: '1px',
+    wordBreak: 'break-word' as const
+  });
+
   return (
-    <div className="container">
+    <div className="container" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '100vh',
+      justifyContent: 'center',
+      paddingBottom: '80px' // Space for fixed bottom nav
+    }}>
       <div className="winamp-window">
         {/* Title Bar with Auth */}
         <div className="winamp-titlebar">
@@ -98,16 +146,12 @@ export default function Home() {
         </div>
 
         <div className="winamp-content">
-          <div className="lcd-display">
-            <div className="lcd-text lcd-text-medium" style={{ textAlign: 'center' }}>
+          {/* NEW: Dot Matrix Display at Top */}
+          <div style={dotMatrixStyle(LCD_THEME)}>
+            <div style={dotMatrixTextStyle(LCD_THEME, '16px')}>
               BRIDGE YOUR PAPER NOTES TO DIGITAL
             </div>
           </div>
-
-          <nav className="nav-tabs">
-            <Link href="/" className="nav-tab active">Write</Link>
-            <Link href="/scan" className="nav-tab">Scan</Link>
-          </nav>
 
           {/* URL Input */}
           <div className="card">
@@ -143,13 +187,18 @@ export default function Home() {
           {code && (
             <div className="card">
               <h2 className="card-title">▶ Generated Code</h2>
-              <div className="code-display">
-                <div className="code-text" style={{ cursor: 'pointer' }} onClick={copyCode} title="Click to copy">
+              {/* NEW: Dot Matrix Code Display (Green Theme) */}
+              <div style={dotMatrixStyle(CODE_THEME)}>
+                <div
+                  style={{ ...dotMatrixTextStyle(CODE_THEME, '28px'), cursor: 'pointer' }}
+                  onClick={copyCode}
+                  title="Click to copy"
+                >
                   {code}
                 </div>
               </div>
 
-              <div className="copy-row">
+              <div className="copy-row" style={{ marginTop: '12px' }}>
                 <button
                   onClick={copyCode}
                   className={`btn ${copied ? 'btn-primary copy-success' : 'btn-secondary'} copy-btn`}
@@ -182,6 +231,56 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Version Number */}
+      <div style={{
+        textAlign: 'center',
+        padding: '8px',
+        fontSize: '10px',
+        color: '#666',
+        fontFamily: 'monospace',
+        marginTop: '16px'
+      }}>
+        v0.3.0
+      </div>
+
+      {/* FIXED BOTTOM NAV */}
+      <nav style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        background: 'var(--background)',
+        borderTop: '1px solid var(--border-dark)',
+        padding: '8px',
+        gap: '8px'
+      }}>
+        <Link
+          href="/"
+          className="nav-tab active"
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            padding: '12px',
+            borderRadius: '4px'
+          }}
+        >
+          ✏️ Write
+        </Link>
+        <Link
+          href="/scan"
+          className="nav-tab"
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            padding: '12px',
+            borderRadius: '4px'
+          }}
+        >
+          📷 Scan
+        </Link>
+      </nav>
     </div>
   );
 }
