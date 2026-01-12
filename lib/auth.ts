@@ -9,26 +9,7 @@ export const supabase = supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
-// Magic Link sign in (simpler than Google OAuth)
-export async function signInWithEmail(email: string) {
-    if (!supabase) {
-        console.error('Supabase not configured');
-        return { error: new Error('Authentication not configured') };
-    }
-
-    const { data, error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-            emailRedirectTo: typeof window !== 'undefined'
-                ? window.location.origin
-                : undefined,
-        },
-    });
-
-    return { data, error };
-}
-
-// Google Sign In (backup option)
+// Google Sign In
 export async function signInWithGoogle() {
     if (!supabase) {
         console.error('Supabase not configured');
