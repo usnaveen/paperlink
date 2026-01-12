@@ -270,24 +270,23 @@ export default function Home() {
 
           {/* Collapsible How It Works - No border when closed */}
           {!code && (
-            <div
-              style={{
-                marginTop: '12px',
-                background: howItWorksOpen ? 'linear-gradient(180deg, var(--metal-mid) 0%, var(--metal-darker) 100%)' : 'transparent',
-                border: howItWorksOpen ? '1px solid var(--border-dark)' : 'none',
-                borderRadius: '4px',
-                padding: howItWorksOpen ? '12px' : '8px 0'
-              }}
-            >
+            <div className={howItWorksOpen ? 'card' : ''} style={{ marginTop: '12px' }}>
               <h2
-                className="card-title"
+                className={howItWorksOpen ? 'card-title' : ''}
                 onClick={() => setHowItWorksOpen(!howItWorksOpen)}
                 style={{
                   cursor: 'pointer',
                   userSelect: 'none',
                   margin: 0,
-                  padding: howItWorksOpen ? 0 : '4px 12px',
-                  color: '#b8c0cc'
+                  color: '#b8c0cc',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  padding: howItWorksOpen ? undefined : '6px 12px',
+                  marginBottom: howItWorksOpen ? '12px' : 0,
+                  paddingBottom: howItWorksOpen ? '6px' : 0,
+                  borderBottom: howItWorksOpen ? '1px solid #8090a0' : 'none'
                 }}
               >
                 {howItWorksOpen ? '▼' : '▶'} How It Works
@@ -297,8 +296,7 @@ export default function Home() {
                   background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)',
                   border: '1px solid #050a15',
                   borderRadius: '3px',
-                  overflow: 'hidden',
-                  marginTop: '12px'
+                  overflow: 'hidden'
                 }}>
                   <div className="playlist-item">
                     <span><span style={{ color: '#00ffcc' }}>1.</span> Paste any URL above and get a short code</span>

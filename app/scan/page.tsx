@@ -15,7 +15,7 @@ export default function ScanPage() {
     const [status, setStatus] = useState<ScanStatus>('idle');
     const [statusText, setStatusText] = useState('');
     const [detectedCode, setDetectedCode] = useState('');
-    const [displayCode, setDisplayCode] = useState(''); // For animation
+    const [displayCode, setDisplayCode] = useState('');
     const [codeState, setCodeState] = useState<CodeState>('empty');
     const [manualCodeChars, setManualCodeChars] = useState('');
     const [cameraError, setCameraError] = useState('');
@@ -59,15 +59,12 @@ export default function ScanPage() {
         setIsAnimating(true);
         const chars = 'ABCDEFGHJKLMNPQRTUVWXY23456789';
 
-        // Roll each character
         for (let pos = 0; pos < code.length; pos++) {
             const targetChar = code[pos];
             if (targetChar === '-' || targetChar === 'P' || targetChar === 'L') {
-                // Skip dashes and PL prefix
                 continue;
             }
 
-            // Roll through random chars
             for (let i = 0; i < 5; i++) {
                 const randomChar = chars[Math.floor(Math.random() * chars.length)];
                 const displayChars = code.split('');
@@ -76,7 +73,6 @@ export default function ScanPage() {
                 await new Promise(r => setTimeout(r, 50));
             }
 
-            // Land on final char
             setDisplayCode(code.slice(0, pos + 1) + code.slice(pos + 1));
         }
 
@@ -142,31 +138,30 @@ export default function ScanPage() {
         setManualCodeChars('');
     }, [stopCamera]);
 
+    // Reset when page loads (handles back navigation)
     useEffect(() => {
+        resetToInitial();
+
         return () => {
             stopCamera();
             if (workerRef.current) {
                 workerRef.current.terminate().catch(() => { });
             }
         };
-    }, [stopCamera]);
+    }, [stopCamera, resetToInitial]);
 
     // Handle detected code with color states
     const handleCodeDetected = async (code: string, isFuzzyMatch = false, originalCode?: string) => {
         setDetectedCode(code);
-        setManualCodeChars(code.replace(/PL-|-/g, '')); // Sync manual entry
+        setManualCodeChars(code.replace(/PL-|-/g, ''));
 
         if (isFuzzyMatch && originalCode) {
-            // Show original scanned code in RED first
             setDisplayCode(originalCode);
             setCodeState('not-found');
             await new Promise(r => setTimeout(r, 800));
-
-            // Animate to corrected code, turn YELLOW
             await animateCodeDisplay(code, 'fuzzy');
             await new Promise(r => setTimeout(r, 500));
         } else {
-            // Animate the code rolling in
             setCodeState('scanning');
             await animateCodeDisplay(code, 'scanning');
         }
@@ -182,24 +177,20 @@ export default function ScanPage() {
             if (response.ok && data.url) {
                 setCodeState('found');
                 setStatus('detected');
-                setStatusText('Opening link...');
-                await new Promise(r => setTimeout(r, 600));
+                await new Promise(r => setTimeout(r, 400));
                 window.location.href = data.url;
             } else {
                 setCodeState('not-found');
                 setStatus('not-found');
-                setStatusText(`Code "${code}" not found.`);
                 setTimeout(() => resetToInitial(), 2000);
             }
         } catch (err) {
             console.error('Resolve error:', err);
             setCodeState('not-found');
-            setStatusText('Error looking up code.');
             setTimeout(() => resetToInitial(), 1500);
         }
     };
 
-    // Fuzzy match helper
     const findFuzzyMatch = async (scannedCode: string): Promise<{ match: string, original: string } | null> => {
         try {
             const response = await fetch('/api/codes');
@@ -231,17 +222,14 @@ export default function ScanPage() {
         const overlay = overlayRef.current;
 
         if (!video || !canvas || !workerRef.current || !overlay) {
-            setStatusText('Not ready. Please wait...');
             return;
         }
 
         if (!isVideoReady || video.videoWidth === 0 || video.videoHeight === 0) {
-            setStatusText('Camera loading...');
             return;
         }
 
         setStatus('capturing');
-        setStatusText('Capturing...');
         setCodeState('scanning');
 
         try {
@@ -299,9 +287,7 @@ export default function ScanPage() {
             const displayImage = canvas.toDataURL('image/png');
 
             setCapturedImage(displayImage);
-
             setStatus('processing');
-            setStatusText('Analyzing...');
 
             const result = await workerRef.current.recognize(ocrImage);
             const text = result.data.text.toUpperCase();
@@ -311,12 +297,10 @@ export default function ScanPage() {
             if (matches && matches.length > 0) {
                 const scannedCode = matches[0].toUpperCase();
 
-                // First try exact match
                 const exactResponse = await fetch(`/api/resolve/${encodeURIComponent(scannedCode)}`);
                 if (exactResponse.ok) {
                     handleCodeDetected(scannedCode);
                 } else {
-                    // Try fuzzy match
                     const fuzzy = await findFuzzyMatch(scannedCode);
                     if (fuzzy) {
                         handleCodeDetected(fuzzy.match, true, fuzzy.original);
@@ -326,13 +310,11 @@ export default function ScanPage() {
                 }
             } else {
                 setCodeState('not-found');
-                setStatusText('No code found. Try again.');
                 setTimeout(() => resetToInitial(), 2000);
             }
         } catch (err) {
             console.error('Capture error:', err);
             setCodeState('not-found');
-            setStatusText('Error. Try again.');
             setTimeout(() => resetToInitial(), 1500);
         }
     };
@@ -344,7 +326,6 @@ export default function ScanPage() {
     const startCamera = async () => {
         try {
             setStatus('initializing');
-            setStatusText('Requesting camera access...');
             setCameraError('');
             setCapturedImage(null);
             setIsVideoReady(false);
@@ -374,7 +355,6 @@ export default function ScanPage() {
             }
 
             if (!workerRef.current) {
-                setStatusText('Loading OCR engine...');
                 const { default: Tesseract, PSM } = await import('tesseract.js');
                 const worker = await Tesseract.createWorker('eng', 1);
                 await worker.setParameters({
@@ -385,7 +365,6 @@ export default function ScanPage() {
             }
 
             setStatus('camera-ready');
-            setStatusText('Position code in rectangle, tap Capture');
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Camera error';
             setCameraError(msg.includes('Permission') ? 'Camera permission denied.' : `Camera error: ${msg}`);
@@ -493,9 +472,7 @@ export default function ScanPage() {
     };
 
     const getFormattedDisplay = () => {
-        // If we have a detected/display code, show that
         if (displayCode) return displayCode;
-        // Otherwise show manual entry
         const chars = manualCodeChars.padEnd(6, '_');
         return `PL-${chars.slice(0, 3)}-${chars.slice(3, 6)}`;
     };
@@ -568,21 +545,132 @@ export default function ScanPage() {
                     />
 
                     <main className="scanner-container">
-                        {/* Idle State - Pill Camera Button */}
-                        {status === 'idle' && (
-                            <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                                <p style={{ marginBottom: '24px', fontFamily: 'var(--font-label)', fontSize: '13px', color: '#b8c0cc' }}>
-                                    Point your camera at a handwritten code
-                                </p>
-                                {/* Pill-shaped Camera Button */}
+                        {/* Camera Box - Always visible with viewfinder/placeholder */}
+                        <div className="card">
+                            <h2 className="card-title">▶ Camera</h2>
+
+                            {/* LED Indicators - Always visible */}
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <div style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        borderRadius: '50%',
+                                        background: cameraActive ? '#00ff00' : '#333',
+                                        boxShadow: cameraActive ? '0 0 8px #00ff00' : 'none',
+                                        border: '1px solid #555'
+                                    }} className={cameraActive ? 'led-on' : ''} />
+                                    <span style={{ fontSize: '10px', color: '#888' }}>CAM</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <div style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        borderRadius: '50%',
+                                        background: flashOn ? '#ffcc00' : '#333',
+                                        boxShadow: flashOn ? '0 0 8px #ffcc00' : 'none',
+                                        border: '1px solid #555'
+                                    }} className={flashOn ? 'led-on' : ''} />
+                                    <span style={{ fontSize: '10px', color: '#888' }}>FLASH</span>
+                                </div>
+                            </div>
+
+                            {/* Viewfinder Box */}
+                            <div
+                                ref={overlayRef}
+                                style={{
+                                    width: '100%',
+                                    height: '100px',
+                                    border: '2px solid #00ffcc',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    borderRadius: '4px',
+                                    boxShadow: showCamera ? '0 0 15px rgba(0, 255, 204, 0.3)' : 'none',
+                                    background: '#0a1a2e',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}
+                            >
+                                {status === 'idle' && (
+                                    <span style={{
+                                        color: '#00ffcc',
+                                        fontSize: '12px',
+                                        textAlign: 'center',
+                                        padding: '10px',
+                                        opacity: 0.7
+                                    }}>
+                                        Point your camera at the handwritten code
+                                    </span>
+                                )}
+
+                                {status === 'error' && (
+                                    <span style={{ color: '#ff3333', fontSize: '12px' }}>{cameraError}</span>
+                                )}
+
+                                {showCamera && !capturedImage && (
+                                    <>
+                                        <video
+                                            ref={videoRef}
+                                            playsInline muted autoPlay
+                                            onCanPlay={handleVideoCanPlay}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover',
+                                                transform: 'scale(1.5)',
+                                                transformOrigin: 'center center'
+                                            }}
+                                        />
+                                        {status === 'initializing' && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 0, left: 0, right: 0, bottom: 0,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                background: 'rgba(0,0,0,0.8)'
+                                            }}>
+                                                <span className="spinner"></span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {capturedImage && (
+                                    <img
+                                        src={capturedImage}
+                                        alt="Captured"
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'fill',
+                                            imageRendering: 'pixelated'
+                                        }}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Camera Controls */}
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '16px',
+                                marginTop: '12px'
+                            }}>
+                                {/* Camera/Capture Button */}
                                 <button
-                                    onClick={startCamera}
+                                    onClick={showCamera ? captureAndProcess : startCamera}
+                                    disabled={showCamera && !isVideoReady}
                                     style={{
-                                        background: 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)',
+                                        background: (showCamera && !isVideoReady)
+                                            ? '#666'
+                                            : 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)',
                                         border: '1px solid #999',
                                         borderRadius: '30px',
-                                        padding: '14px 50px',
-                                        cursor: 'pointer',
+                                        padding: '12px 40px',
+                                        cursor: (showCamera && !isVideoReady) ? 'not-allowed' : 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
@@ -592,202 +680,45 @@ export default function ScanPage() {
                                     <Image
                                         src="/camera.svg"
                                         alt="Camera"
-                                        width={28}
-                                        height={28}
-                                        style={{ opacity: 0.7 }}
+                                        width={24}
+                                        height={24}
+                                        style={{ opacity: (showCamera && !isVideoReady) ? 0.3 : 0.7 }}
                                     />
                                 </button>
-                            </div>
-                        )}
 
-                        {/* Error */}
-                        {status === 'error' && (
-                            <div className="card">
-                                <h2 className="card-title" style={{ color: '#cc3333' }}>▶ Camera Error</h2>
-                                <p style={{ marginBottom: '12px', fontSize: '12px', color: '#cc3333' }}>{cameraError}</p>
-                                <button onClick={startCamera} className="btn btn-secondary">↻ Try Again</button>
-                            </div>
-                        )}
-
-                        {/* Camera View */}
-                        {showCamera && (
-                            <>
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    marginBottom: '12px',
-                                    position: 'relative',
-                                    marginTop: '20px'
-                                }}>
-                                    {/* Viewfinder */}
-                                    <div
-                                        ref={overlayRef}
+                                {/* Flash Button */}
+                                {hasFlash && showCamera && (
+                                    <button
+                                        onClick={toggleFlash}
                                         style={{
-                                            width: '280px',
-                                            height: '90px',
-                                            border: '2px solid #00ffcc',
-                                            position: 'relative',
-                                            overflow: 'hidden',
-                                            borderRadius: '4px',
-                                            boxShadow: '0 0 15px rgba(0, 255, 204, 0.3)',
-                                            background: '#000'
+                                            background: flashOn
+                                                ? 'linear-gradient(180deg, #ffee00 0%, #ffcc00 100%)'
+                                                : 'linear-gradient(180deg, #555 0%, #333 100%)',
+                                            border: '1px solid #666',
+                                            borderRadius: '50%',
+                                            width: '40px',
+                                            height: '40px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
                                         }}
                                     >
-                                        {capturedImage ? (
-                                            <div style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                background: '#1f3699',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
-                                            }}>
-                                                <img
-                                                    src={capturedImage}
-                                                    alt="Digitized"
-                                                    style={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'fill',
-                                                        imageRendering: 'pixelated'
-                                                    }}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <video
-                                                    ref={videoRef}
-                                                    playsInline muted autoPlay
-                                                    onCanPlay={handleVideoCanPlay}
-                                                    style={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'cover',
-                                                        transform: 'scale(1.5)',
-                                                        transformOrigin: 'center center'
-                                                    }}
-                                                />
-                                                {status === 'initializing' && (
-                                                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
-                                                        <span className="spinner"></span>
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Status Text */}
-                                <div style={{ textAlign: 'center', marginBottom: '16px', fontSize: '12px', color: '#b8c0cc' }}>
-                                    {status === 'camera-ready' && !capturedImage ? 'Center code in box' : statusText}
-                                </div>
-
-                                {/* Camera Controls Row */}
-                                {status === 'camera-ready' && !capturedImage && (
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '16px',
-                                        marginBottom: '20px'
-                                    }}>
-                                        {/* LED Indicators */}
-                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            {/* Camera LED */}
-                                            <div style={{
-                                                width: '10px',
-                                                height: '10px',
-                                                borderRadius: '50%',
-                                                background: cameraActive ? '#00ff00' : '#333',
-                                                boxShadow: cameraActive ? '0 0 8px #00ff00' : 'none'
-                                            }} className={cameraActive ? 'led-on' : ''} />
-
-                                            {/* Flash LED */}
-                                            <div style={{
-                                                width: '10px',
-                                                height: '10px',
-                                                borderRadius: '50%',
-                                                background: flashOn ? '#ffcc00' : '#333',
-                                                boxShadow: flashOn ? '0 0 8px #ffcc00' : 'none'
-                                            }} className={flashOn ? 'led-on' : ''} />
-                                        </div>
-
-                                        {/* Capture Button (Pill) */}
-                                        <button
-                                            onClick={captureAndProcess}
-                                            disabled={!isVideoReady}
-                                            style={{
-                                                background: isVideoReady
-                                                    ? 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)'
-                                                    : '#666',
-                                                border: '1px solid #999',
-                                                borderRadius: '30px',
-                                                padding: '12px 40px',
-                                                cursor: isVideoReady ? 'pointer' : 'not-allowed',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.8)'
-                                            }}
-                                        >
-                                            <Image
-                                                src="/camera.svg"
-                                                alt="Capture"
-                                                width={24}
-                                                height={24}
-                                                style={{ opacity: isVideoReady ? 0.7 : 0.3 }}
-                                            />
-                                        </button>
-
-                                        {/* Flash Button */}
-                                        {hasFlash && (
-                                            <button
-                                                onClick={toggleFlash}
-                                                style={{
-                                                    background: flashOn
-                                                        ? 'linear-gradient(180deg, #ffee00 0%, #ffcc00 100%)'
-                                                        : 'linear-gradient(180deg, #555 0%, #333 100%)',
-                                                    border: '1px solid #666',
-                                                    borderRadius: '50%',
-                                                    width: '40px',
-                                                    height: '40px',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center'
-                                                }}
-                                            >
-                                                <Image
-                                                    src="/flash.png"
-                                                    alt="Flash"
-                                                    width={20}
-                                                    height={20}
-                                                    style={{ opacity: flashOn ? 1 : 0.5 }}
-                                                />
-                                            </button>
-                                        )}
-                                    </div>
+                                        <Image
+                                            src="/flash.png"
+                                            alt="Flash"
+                                            width={20}
+                                            height={20}
+                                            style={{ opacity: flashOn ? 1 : 0.5 }}
+                                        />
+                                    </button>
                                 )}
-
-                                {/* Detected State */}
-                                {(status === 'detected' || status === 'not-found' || status === 'fuzzy-match') && (
-                                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                                        <div style={{
-                                            fontSize: '14px',
-                                            color: codeState === 'found' ? '#00ff00' : codeState === 'fuzzy' ? '#ffcc00' : '#ff3333'
-                                        }}>
-                                            {codeState === 'found' && '✅ Opening link...'}
-                                            {codeState === 'not-found' && '❌ Code not found'}
-                                            {codeState === 'fuzzy' && '⚠️ Fuzzy match found'}
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        )}
+                            </div>
+                        </div>
 
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                        {/* Manual Entry with Dynamic Color */}
+                        {/* Code Display with Dynamic Color */}
                         <div className="card">
                             <h2 className="card-title">▶ Code Display</h2>
                             <div style={{ position: 'relative' }}>
@@ -878,7 +809,7 @@ export default function ScanPage() {
                 color: '#666',
                 fontFamily: 'monospace'
             }}>
-                v0.3.0
+                v0.3.1
             </div>
         </div>
     );
