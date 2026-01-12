@@ -27,6 +27,46 @@ export default function ScanPage() {
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
     const validChars = '23456789ACDEFGHJKLMNPQRTUVWXY';
 
+    // LCD Blue Theme for Dot Matrix
+    const LCD_THEME = {
+        bg: '#0055aa',
+        dotInactive: 'rgba(255, 255, 255, 0.2)',
+        dotActive: '#ffffff',
+        glow: '0 0 4px #ffffff'
+    };
+
+    // Cyan Theme for Manual Entry
+    const CYAN_THEME = {
+        bg: '#0a1a2e',
+        dotInactive: 'rgba(0, 255, 204, 0.15)',
+        dotActive: '#00ffcc',
+        glow: '0 0 8px #00ffcc'
+    };
+
+    const dotMatrixStyle = (theme: typeof LCD_THEME) => ({
+        background: theme.bg,
+        backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1.5px, transparent 2px)`,
+        backgroundSize: '6px 6px',
+        borderRadius: '4px',
+        border: '2px solid rgba(0,0,0,0.3)',
+        boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '60px'
+    });
+
+    const dotMatrixTextStyle = (theme: typeof LCD_THEME, size: string = '14px') => ({
+        fontFamily: 'var(--font-doto)',
+        fontSize: size,
+        fontWeight: 700 as const,
+        color: theme.dotActive,
+        textShadow: theme.glow,
+        textAlign: 'center' as const,
+        letterSpacing: '1px'
+    });
+
     const toggleFlash = async () => {
         if (!streamRef.current) return;
         const track = streamRef.current.getVideoTracks()[0];
@@ -445,16 +485,12 @@ export default function ScanPage() {
                 </div>
 
                 <div className="winamp-content">
-                    <div className="lcd-display">
-                        <div className="lcd-text lcd-text-medium" style={{ textAlign: 'center' }}>
+                    {/* Dot Matrix Header */}
+                    <div style={dotMatrixStyle(LCD_THEME)}>
+                        <div style={dotMatrixTextStyle(LCD_THEME, '16px')}>
                             SCAN YOUR HANDWRITTEN CODES
                         </div>
                     </div>
-
-                    <nav className="nav-tabs">
-                        <Link href="/" className="nav-tab">Write</Link>
-                        <Link href="/scan" className="nav-tab active">Scan</Link>
-                    </nav>
 
                     <main className="scanner-container">
                         {status === 'idle' && (
@@ -595,35 +631,25 @@ export default function ScanPage() {
                         )}
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                        {/* Manual Entry - Single editable input */}
+                        {/* Manual Entry with Matrix Theme */}
                         <div className="card">
                             <h2 className="card-title">▶ Manual Entry</h2>
                             <p style={{ marginBottom: '12px', fontFamily: 'var(--font-label)', fontSize: '11px', color: 'var(--light-gray)' }}>
                                 Tap below and type the 6 characters:
                             </p>
                             <div style={{ position: 'relative' }}>
-                                {/* Visible formatted display */}
+                                {/* Dot Matrix Style Display */}
                                 <div
                                     onClick={() => inputRef.current?.focus()}
                                     style={{
-                                        fontFamily: 'var(--font-lcd)',
-                                        fontSize: '28px',
-                                        color: 'var(--lcd-text)',
-                                        textShadow: '0 0 10px var(--lcd-text)',
-                                        textAlign: 'center',
-                                        padding: '16px',
-                                        background: 'linear-gradient(180deg, var(--lcd-bg-light) 0%, var(--lcd-bg-dark) 100%)',
-                                        border: '2px solid var(--shadow-deep)',
-                                        borderRadius: '4px',
-                                        letterSpacing: '6px',
+                                        ...dotMatrixStyle(CYAN_THEME),
                                         cursor: 'text',
-                                        minHeight: '70px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
+                                        minHeight: '70px'
                                     }}
                                 >
-                                    {getFormattedDisplay()}
+                                    <div style={dotMatrixTextStyle(CYAN_THEME, '28px')}>
+                                        {getFormattedDisplay()}
+                                    </div>
                                 </div>
                                 {/* Hidden input for capturing keyboard */}
                                 <input
@@ -656,6 +682,12 @@ export default function ScanPage() {
                                 {manualCodeChars.length === 6 ? '▶ Go' : `${manualCodeChars.length}/6 characters`}
                             </button>
                         </div>
+
+                        {/* Navigation at Bottom */}
+                        <nav className="nav-tabs" style={{ marginTop: '12px' }}>
+                            <Link href="/" className="nav-tab">Write</Link>
+                            <Link href="/scan" className="nav-tab active">Scan</Link>
+                        </nav>
                     </main>
                 </div>
             </div>
@@ -666,7 +698,7 @@ export default function ScanPage() {
                 color: '#666',
                 fontFamily: 'var(--font-label)'
             }}>
-                v0.2.0
+                v0.3.0
             </div>
         </div>
     );

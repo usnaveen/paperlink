@@ -29,9 +29,9 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [userId, setUserId] = useState<string | undefined>(undefined);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
   useEffect(() => {
-    // Check for user
     getUser().then(user => {
       if (user) setUserId(user.id);
     });
@@ -97,13 +97,6 @@ export default function Home() {
     }
   };
 
-  const copyShortUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(shortUrl);
-      if (navigator.vibrate) navigator.vibrate(50);
-    } catch { }
-  };
-
   // Dot Matrix Display Style
   const dotMatrixStyle = (theme: typeof LCD_THEME) => ({
     background: theme.bg,
@@ -119,10 +112,10 @@ export default function Home() {
     minHeight: '60px'
   });
 
-  const dotMatrixTextStyle = (theme: typeof LCD_THEME, size: string = '14px') => ({
+  const dotMatrixTextStyle = (theme: typeof LCD_THEME, size: string = '14px', bold: boolean = false) => ({
     fontFamily: 'var(--font-doto)',
     fontSize: size,
-    fontWeight: 700,
+    fontWeight: bold ? 900 : 700,
     color: theme.dotActive,
     textShadow: theme.glow,
     textAlign: 'center' as const,
@@ -135,9 +128,19 @@ export default function Home() {
       display: 'flex',
       flexDirection: 'column',
       minHeight: '100vh',
-      justifyContent: 'center',
-      paddingBottom: '80px' // Space for fixed bottom nav
+      justifyContent: 'center'
     }}>
+      {/* Glitter Animation Keyframes */}
+      <style>{`
+                @keyframes glitter {
+                    0%, 100% { opacity: 1; text-shadow: 0 0 8px #00ff00; }
+                    50% { opacity: 0.85; text-shadow: 0 0 16px #00ff00, 0 0 24px #00ff00; }
+                }
+                .glitter-text {
+                    animation: glitter 1.5s ease-in-out infinite;
+                }
+            `}</style>
+
       <div className="winamp-window">
         {/* Title Bar with Auth */}
         <div className="winamp-titlebar">
@@ -146,10 +149,10 @@ export default function Home() {
         </div>
 
         <div className="winamp-content">
-          {/* NEW: Dot Matrix Display at Top */}
+          {/* Dot Matrix Display at Top */}
           <div style={dotMatrixStyle(LCD_THEME)}>
-            <div style={dotMatrixTextStyle(LCD_THEME, '16px')}>
-              BRIDGE YOUR PAPER NOTES TO DIGITAL
+            <div style={dotMatrixTextStyle(LCD_THEME, '18px', true)}>
+              BRIDGE PAPER NOTES TO DIGITAL
             </div>
           </div>
 
@@ -187,9 +190,10 @@ export default function Home() {
           {code && (
             <div className="card">
               <h2 className="card-title">▶ Generated Code</h2>
-              {/* NEW: Dot Matrix Code Display (Green Theme) */}
+              {/* Dot Matrix Code Display with Glitter */}
               <div style={dotMatrixStyle(CODE_THEME)}>
                 <div
+                  className="glitter-text"
                   style={{ ...dotMatrixTextStyle(CODE_THEME, '28px'), cursor: 'pointer' }}
                   onClick={copyCode}
                   title="Click to copy"
@@ -204,31 +208,46 @@ export default function Home() {
                   className={`btn ${copied ? 'btn-primary copy-success' : 'btn-secondary'} copy-btn`}
                   style={{ width: '100%' }}
                 >
-                  {copied ? '✓ Copied to clipboard' : '📋 Copy Code'}
+                  {copied ? '✓ Copied to clipboard' : 'Copy Code'}
                 </button>
               </div>
             </div>
           )}
 
+          {/* Collapsible How It Works */}
           {!code && (
             <div className="card">
-              <h2 className="card-title">▶ How It Works</h2>
-              <div style={{ background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)', border: '1px solid #050a15', borderRadius: '3px', overflow: 'hidden' }}>
-                <div className="playlist-item">
-                  <span><span style={{ color: '#00ffcc' }}>1.</span> Paste any URL above and get a short code</span>
+              <h2
+                className="card-title"
+                onClick={() => setHowItWorksOpen(!howItWorksOpen)}
+                style={{ cursor: 'pointer', userSelect: 'none' }}
+              >
+                {howItWorksOpen ? '▼' : '▶'} How It Works
+              </h2>
+              {howItWorksOpen && (
+                <div style={{ background: 'linear-gradient(180deg, #1a2845 0%, #0d1829 100%)', border: '1px solid #050a15', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div className="playlist-item">
+                    <span><span style={{ color: '#00ffcc' }}>1.</span> Paste any URL above and get a short code</span>
+                  </div>
+                  <div className="playlist-item">
+                    <span><span style={{ color: '#00ffcc' }}>2.</span> Write the code in your paper notes</span>
+                  </div>
+                  <div className="playlist-item">
+                    <span><span style={{ color: '#00ffcc' }}>3.</span> Use the <Link href="/scan" style={{ color: '#00ffcc', textDecoration: 'underline' }}>Scanner</Link> to scan your handwriting</span>
+                  </div>
+                  <div className="playlist-item" style={{ borderBottom: 'none' }}>
+                    <span><span style={{ color: '#00ffcc' }}>4.</span> Instantly open the linked URL!</span>
+                  </div>
                 </div>
-                <div className="playlist-item">
-                  <span><span style={{ color: '#00ffcc' }}>2.</span> Write the code in your paper notes</span>
-                </div>
-                <div className="playlist-item">
-                  <span><span style={{ color: '#00ffcc' }}>3.</span> Use the <Link href="/scan" style={{ color: '#00ffcc', textDecoration: 'underline' }}>Scanner</Link> to scan your handwriting</span>
-                </div>
-                <div className="playlist-item" style={{ borderBottom: 'none' }}>
-                  <span><span style={{ color: '#00ffcc' }}>4.</span> Instantly open the linked URL!</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
+
+          {/* Navigation Tabs (Below Content, Not Fixed) */}
+          <nav className="nav-tabs" style={{ marginTop: '12px' }}>
+            <Link href="/" className="nav-tab active">Write</Link>
+            <Link href="/scan" className="nav-tab">Scan</Link>
+          </nav>
         </div>
       </div>
 
@@ -243,44 +262,6 @@ export default function Home() {
       }}>
         v0.3.0
       </div>
-
-      {/* FIXED BOTTOM NAV */}
-      <nav style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        display: 'flex',
-        background: 'var(--background)',
-        borderTop: '1px solid var(--border-dark)',
-        padding: '8px',
-        gap: '8px'
-      }}>
-        <Link
-          href="/"
-          className="nav-tab active"
-          style={{
-            flex: 1,
-            textAlign: 'center',
-            padding: '12px',
-            borderRadius: '4px'
-          }}
-        >
-          ✏️ Write
-        </Link>
-        <Link
-          href="/scan"
-          className="nav-tab"
-          style={{
-            flex: 1,
-            textAlign: 'center',
-            padding: '12px',
-            borderRadius: '4px'
-          }}
-        >
-          📷 Scan
-        </Link>
-      </nav>
     </div>
   );
 }

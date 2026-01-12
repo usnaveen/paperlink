@@ -13,6 +13,38 @@ interface UserLink {
     click_count: number;
 }
 
+// Theme Constants
+const CODE_THEME = {
+    bg: '#001100',
+    dotInactive: 'rgba(0, 255, 0, 0.15)',
+    dotActive: '#00ff00',
+    glow: '0 0 8px #00ff00'
+};
+
+const BLUE_THEME = {
+    bg: '#001144',
+    dotInactive: 'rgba(51, 102, 255, 0.2)',
+    dotActive: '#3366ff'
+};
+
+const YELLOW_THEME = {
+    bg: '#221100',
+    dotInactive: 'rgba(255, 153, 51, 0.2)',
+    dotActive: '#ff9933'
+};
+
+const RED_THEME = {
+    bg: '#220000',
+    dotInactive: 'rgba(204, 51, 51, 0.2)',
+    dotActive: '#cc3333'
+};
+
+const dotPatternStyle = (theme: typeof BLUE_THEME) => ({
+    background: theme.bg,
+    backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1.5px, transparent 2px)`,
+    backgroundSize: '6px 6px'
+});
+
 // Swipeable Item Component
 function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink, onDelete: (id: number) => void, onCopy: (text: string) => void, onEdit: (link: UserLink) => void }) {
     const [offset, setOffset] = useState(0);
@@ -20,7 +52,6 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
     const currentX = useRef<number>(0);
     const isDragging = useRef(false);
 
-    // Reset offset when scrolling/id changes
     useEffect(() => {
         setOffset(0);
         currentX.current = 0;
@@ -34,10 +65,7 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
     const handleTouchMove = (e: React.TouchEvent) => {
         if (!startX.current || !isDragging.current) return;
         const diff = e.touches[0].clientX - startX.current;
-
-        // Only allow swiping left. Width depends on buttons (3 buttons * ~60px = 180px)
         const newOffset = Math.min(0, Math.max(-180, diff));
-
         setOffset(newOffset);
         currentX.current = newOffset;
     };
@@ -45,18 +73,16 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
     const handleTouchEnd = () => {
         isDragging.current = false;
         startX.current = null;
-
-        // Snap logic
         if (currentX.current < -90) {
-            setOffset(-180); // Snap open
+            setOffset(-180);
         } else {
-            setOffset(0); // Snap closed
+            setOffset(0);
         }
     };
 
     return (
         <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '4px', marginBottom: '8px' }}>
-            {/* Background Actions */}
+            {/* Background Actions with Dot Pattern */}
             <div style={{
                 position: 'absolute',
                 top: 0,
@@ -71,7 +97,16 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
                         onCopy(`${window.location.origin}/r/${link.short_code}`);
                         setOffset(0);
                     }}
-                    style={{ flex: 1, background: '#3366ff', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                    style={{
+                        flex: 1,
+                        ...dotPatternStyle(BLUE_THEME),
+                        color: BLUE_THEME.dotActive,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        textShadow: '0 0 4px ' + BLUE_THEME.dotActive
+                    }}
                 >
                     COPY
                 </button>
@@ -80,13 +115,31 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
                         onEdit(link);
                         setOffset(0);
                     }}
-                    style={{ flex: 1, background: '#ff9933', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                    style={{
+                        flex: 1,
+                        ...dotPatternStyle(YELLOW_THEME),
+                        color: YELLOW_THEME.dotActive,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        textShadow: '0 0 4px ' + YELLOW_THEME.dotActive
+                    }}
                 >
                     EDIT
                 </button>
                 <button
                     onClick={() => onDelete(link.id)}
-                    style={{ flex: 1, background: '#cc3333', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                    style={{
+                        flex: 1,
+                        ...dotPatternStyle(RED_THEME),
+                        color: RED_THEME.dotActive,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        textShadow: '0 0 4px ' + RED_THEME.dotActive
+                    }}
                 >
                     DELETE
                 </button>
@@ -108,17 +161,25 @@ function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink,
                 onTouchEnd={handleTouchEnd}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
+                    <div style={{ width: '100%' }}>
+                        {/* Code in Dot Matrix Style */}
                         <div style={{
-                            fontFamily: 'var(--font-lcd)',
-                            fontSize: '22px',
-                            fontWeight: 'bold',
-                            color: '#00ffff',
-                            letterSpacing: '2px',
-                            marginBottom: '6px',
-                            textShadow: '1px 1px 0 #000'
+                            ...dotPatternStyle(CODE_THEME),
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            marginBottom: '8px',
+                            display: 'inline-block'
                         }}>
-                            {link.short_code}
+                            <span style={{
+                                fontFamily: 'var(--font-doto)',
+                                fontSize: '20px',
+                                fontWeight: 700,
+                                color: CODE_THEME.dotActive,
+                                textShadow: CODE_THEME.glow,
+                                letterSpacing: '2px'
+                            }}>
+                                {link.short_code}
+                            </span>
                         </div>
                         <div style={{
                             fontSize: '13px',
@@ -173,7 +234,6 @@ export default function LinksPage() {
         }
         fetchLinks();
 
-        // Redirect on logout
         const { data: authListener } = supabase?.auth.onAuthStateChange((event) => {
             if (event === 'SIGNED_OUT') window.location.href = '/';
         }) || { data: { subscription: { unsubscribe: () => { } } } };
@@ -192,7 +252,6 @@ export default function LinksPage() {
         if (!confirm('Delete this link?')) return;
         if (!supabase) return;
 
-        // Optimistic update
         const originalLinks = [...links];
         setLinks(links.filter(link => link.id !== id));
 
@@ -235,6 +294,14 @@ export default function LinksPage() {
         }
     };
 
+    // LCD Blue Theme for Header
+    const LCD_THEME = {
+        bg: '#0055aa',
+        dotInactive: 'rgba(255, 255, 255, 0.2)',
+        dotActive: '#ffffff',
+        glow: '0 0 4px #ffffff'
+    };
+
     return (
         <div className="container">
             <div className="winamp-window">
@@ -244,6 +311,30 @@ export default function LinksPage() {
                 </div>
 
                 <div className="winamp-content">
+                    {/* Dot Matrix Header */}
+                    <div style={{
+                        background: LCD_THEME.bg,
+                        backgroundImage: `radial-gradient(circle, ${LCD_THEME.dotInactive} 1.5px, transparent 2px)`,
+                        backgroundSize: '6px 6px',
+                        borderRadius: '4px',
+                        border: '2px solid rgba(0,0,0,0.3)',
+                        boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
+                        padding: '16px',
+                        marginBottom: '12px',
+                        textAlign: 'center'
+                    }}>
+                        <span style={{
+                            fontFamily: 'var(--font-doto)',
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            color: LCD_THEME.dotActive,
+                            textShadow: LCD_THEME.glow,
+                            letterSpacing: '1px'
+                        }}>
+                            YOUR SAVED LINKS
+                        </span>
+                    </div>
+
                     {/* Navigation */}
                     <div style={{ marginBottom: '10px' }}>
                         <Link href="/" className="btn btn-secondary" style={{ width: '100%' }}>
@@ -312,6 +403,17 @@ export default function LinksPage() {
                     <span>{toast.message}</span>
                 </div>
             )}
+
+            {/* Version */}
+            <div style={{
+                textAlign: 'center',
+                padding: '8px',
+                fontSize: '10px',
+                color: '#666',
+                fontFamily: 'monospace'
+            }}>
+                v0.3.0
+            </div>
         </div>
     );
 }
