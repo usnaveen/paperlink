@@ -18,11 +18,58 @@ export default function ScanPage() {
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
 
+    const [flashOn, setFlashOn] = useState(false);
+    const [hasFlash, setHasFlash] = useState(false);
+    const overlayRef = useRef<HTMLDivElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const workerRef = useRef<any>(null);
 
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
     const validChars = '23456789ACDEFGHJKLMNPQRTUVWXY';
+
+    const toggleFlash = async () => {
+        if (!streamRef.current) return;
+        const track = streamRef.current.getVideoTracks()[0];
+        if (!track) return;
+
+        try {
+            await track.applyConstraints({
+                advanced: [{ torch: !flashOn }] as any
+            });
+            setFlashOn(!flashOn);
+        } catch (err) {
+            console.error('Flash error:', err);
+        }
+    };
+
+    const applyDigitalTheme = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        // Convert to "Matrix/LCD" theme
+        // Dark pixels -> Cyan (#00ffcc)
+        // Light pixels -> Transparent/Background color logic handled by CSS or here
+        // Actually, we want to replace ink with Cyan, and paper with Dark Blue
+
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+
+            if (gray < 100) {
+                // Ink (Dark) -> Neon Cyan
+                data[i] = 0;    // R
+                data[i + 1] = 255; // G
+                data[i + 2] = 204; // B
+                data[i + 3] = 255; // Alpha
+            } else {
+                // Paper (Light) -> Dark Blue (Background)
+                data[i] = 31;   // R (#1f)
+                data[i + 1] = 54; // G (#36)
+                data[i + 2] = 153; // B (#99)
+                data[i + 3] = 255; // Alpha
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+    };
 
     const stopCamera = useCallback(() => {
         if (streamRef.current) {
@@ -87,8 +134,9 @@ export default function ScanPage() {
     const captureAndProcess = async () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
+        const overlay = overlayRef.current;
 
-        if (!video || !canvas || !workerRef.current) {
+        if (!video || !canvas || !workerRef.current || !overlay) {
             setStatusText('Not ready. Please wait...');
             return;
         }
@@ -105,40 +153,62 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not get canvas context');
 
-            const overlayWidthPercent = 0.80;
-            const overlayHeightPercent = 0.25;
+            // Exact Crop Logic
+            // 1. Get relative size of video element vs intrinsic video
+            const videoRect = video.getBoundingClientRect();
+            const overlayRect = overlay.getBoundingClientRect();
 
-            const cropWidth = video.videoWidth * overlayWidthPercent;
-            const cropHeight = video.videoHeight * overlayHeightPercent;
-            const cropX = (video.videoWidth - cropWidth) / 2;
-            const cropY = (video.videoHeight - cropHeight) / 2;
+            // Calculate ratios to map visually displayed pixels to native video pixels
+            const scaleX = video.videoWidth / videoRect.width;
+            const scaleY = video.videoHeight / videoRect.height;
+
+            // Calculate crop position relative to the video element
+            const relativeCropX = overlayRect.left - videoRect.left;
+            const relativeCropY = overlayRect.top - videoRect.top;
+
+            // Map to intrinsic coordinates
+            const cropX = relativeCropX * scaleX;
+            const cropY = relativeCropY * scaleY;
+            const cropWidth = overlayRect.width * scaleX;
+            const cropHeight = overlayRect.height * scaleY;
 
             canvas.width = cropWidth;
             canvas.height = cropHeight;
+
+            // Draw original for OCR
             ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
-            // Apply Pre-processing (Grayscale + Binary)
-            const processedImage = preprocessImage(canvas);
+            // 1. Process for OCR (High Contrast)
+            const ocrImage = preprocessImage(canvas);
 
-            setCapturedImage(processedImage);
+            // 2. Process for Display (Digitize Animation)
+            // Redraw original to canvas to reset effects for display processing
+            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            applyDigitalTheme(ctx, cropWidth, cropHeight);
+            const displayImage = canvas.toDataURL('image/png');
+
+            setCapturedImage(displayImage);
 
             setStatus('processing');
             setStatusText('Analyzing...');
 
-            const result = await workerRef.current.recognize(processedImage);
+            // Run OCR on the high-contrast version
+            const result = await workerRef.current.recognize(ocrImage);
             const text = result.data.text.toUpperCase();
             console.log('OCR Result:', text);
 
             const matches = text.match(codePattern);
 
             if (matches && matches.length > 0) {
-                await handleCodeDetected(matches[0].toUpperCase());
+                // Artificial delay to show off the "Digitize" animation
+                setTimeout(() => {
+                    handleCodeDetected(matches[0].toUpperCase());
+                }, 800);
             } else {
                 setStatusText('No code found. Try again.');
-                // Reset to initial state
                 setTimeout(() => {
                     resetToInitial();
-                }, 1500);
+                }, 2000);
             }
         } catch (err) {
             console.error('Capture error:', err);
@@ -160,15 +230,25 @@ export default function ScanPage() {
             setCameraError('');
             setCapturedImage(null);
             setIsVideoReady(false);
+            setFlashOn(false);
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera not supported');
             }
 
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1920 }, // Higher res for better crop
+                    height: { ideal: 1080 }
+                },
             });
             streamRef.current = stream;
+
+            // Check for flash capability
+            const track = stream.getVideoTracks()[0];
+            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            setHasFlash('torch' in capabilities);
 
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
@@ -262,7 +342,6 @@ export default function ScanPage() {
     return (
         <div className="container">
             <div className="winamp-window">
-                {/* Title Bar - No window buttons */}
                 <div className="winamp-titlebar">
                     <span className="winamp-titlebar-text">PAPERLINK SCANNER</span>
                     <AuthButton />
@@ -281,15 +360,14 @@ export default function ScanPage() {
                     </nav>
 
                     <main className="scanner-container">
-                        {/* Start Camera */}
                         {status === 'idle' && (
-                            <div className="card text-center">
-                                <h2 className="card-title">▶ Camera Scanner</h2>
-                                <p style={{ marginBottom: '16px', fontFamily: 'var(--font-lcd)', fontSize: '13px', color: 'var(--lcd-text)', textShadow: '0 0 8px var(--lcd-text)' }}>
+                            <div className="card text-center" style={{ padding: '30px' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📷</div>
+                                <p style={{ marginBottom: '20px', fontFamily: 'var(--font-label)', fontSize: '13px', color: 'var(--btn-icon)', fontWeight: 'bold' }}>
                                     Capture a photo of your handwritten code
                                 </p>
-                                <button onClick={startCamera} className="btn btn-primary">
-                                    📷 Start Camera
+                                <button onClick={startCamera} className="btn btn-primary" style={{ width: '100%' }}>
+                                    Start Camera
                                 </button>
                             </div>
                         )}
@@ -306,28 +384,68 @@ export default function ScanPage() {
                         {/* Camera View */}
                         {showCamera && (
                             <>
-                                <div className="video-wrapper">
+                                <div className="video-wrapper" style={{ position: 'relative' }}>
                                     {capturedImage ? (
-                                        <img src={capturedImage} alt="Captured" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
+                                        <div style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            background: '#1f3699',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            animation: 'fadeIn 0.5s ease-out'
+                                        }}>
+                                            <img
+                                                src={capturedImage}
+                                                alt="Digitized"
+                                                style={{
+                                                    maxWidth: '80%',
+                                                    maxHeight: '80%',
+                                                    boxShadow: '0 0 20px #00ffcc',
+                                                    border: '2px solid #00ffcc',
+                                                    imageRendering: 'pixelated'
+                                                }}
+                                            />
+                                        </div>
                                     ) : (
                                         <>
                                             <video
                                                 ref={videoRef}
                                                 playsInline muted autoPlay
                                                 onCanPlay={handleVideoCanPlay}
-                                                onLoadedMetadata={handleVideoCanPlay}
-                                                onPlaying={handleVideoCanPlay}
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: status === 'initializing' ? 'none' : 'block' }}
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                             />
-                                            {status === 'initializing' && (
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#000' }}>
-                                                    <div style={{ textAlign: 'center' }}>
-                                                        <span className="spinner"></span>
-                                                        <div style={{ fontFamily: 'var(--font-lcd)', fontSize: '14px', color: 'var(--lcd-text)', marginTop: '10px' }}>{statusText}</div>
-                                                    </div>
-                                                </div>
+                                            {/* Exact Crop Overlay */}
+                                            <div
+                                                ref={overlayRef}
+                                                className="scan-overlay"
+                                                style={{
+                                                    // Ensure overlay is strictly positioned
+                                                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.7)' // Dim outside area
+                                                }}
+                                            />
+
+                                            {hasFlash && (
+                                                <button
+                                                    onClick={toggleFlash}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '10px',
+                                                        right: '10px',
+                                                        background: flashOn ? '#ffcc00' : 'rgba(0,0,0,0.5)',
+                                                        border: '2px solid #fff',
+                                                        borderRadius: '50%',
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        color: flashOn ? '#000' : '#fff',
+                                                        fontSize: '20px',
+                                                        cursor: 'pointer',
+                                                        zIndex: 10
+                                                    }}
+                                                >
+                                                    ⚡️
+                                                </button>
                                             )}
-                                            {status !== 'initializing' && <div className="scan-overlay" />}
                                         </>
                                     )}
                                     <canvas ref={canvasRef} style={{ display: 'none' }} />

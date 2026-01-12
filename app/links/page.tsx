@@ -247,7 +247,7 @@ export default function LinksPage() {
                     {/* Navigation */}
                     <div style={{ marginBottom: '10px' }}>
                         <Link href="/" className="btn btn-secondary" style={{ width: '100%' }}>
-                            🏠 HOME
+                            ← Back to Home
                         </Link>
                     </div>
 
