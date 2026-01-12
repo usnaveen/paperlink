@@ -105,8 +105,8 @@ export default function Home() {
           </div>
 
           <nav className="nav-tabs">
-            <Link href="/" className="nav-tab active">✍️ Write</Link>
-            <Link href="/scan" className="nav-tab">📷 Scan</Link>
+            <Link href="/" className="nav-tab active">Write</Link>
+            <Link href="/scan" className="nav-tab">Scan</Link>
           </nav>
 
           {/* URL Input */}
@@ -142,27 +142,21 @@ export default function Home() {
 
           {code && (
             <div className="card">
-              <h2 className="card-title">▶ Your Handwriting Code</h2>
+              <h2 className="card-title">▶ Generated Code</h2>
               <div className="code-display">
-                <div className="code-text">{code}</div>
-                <p className="code-hint">Write this code in your notes</p>
+                <div className="code-text" style={{ cursor: 'pointer' }} onClick={copyCode} title="Click to copy">
+                  {code}
+                </div>
               </div>
 
               <div className="copy-row">
                 <button
                   onClick={copyCode}
                   className={`btn ${copied ? 'btn-primary copy-success' : 'btn-secondary'} copy-btn`}
+                  style={{ width: '100%' }}
                 >
-                  {copied ? '✓ Copied!' : '📋 Copy Code'}
+                  {copied ? '✓ Copied to clipboard' : '📋 Copy Code'}
                 </button>
-                <button onClick={copyShortUrl} className="btn btn-secondary btn-icon" title="Copy short URL">
-                  🔗
-                </button>
-              </div>
-
-              <div className="handwriting-guide">
-                <span className="handwriting-sample">{code}</span>
-                <span className="handwriting-text">Write it clearly on paper. Scan it later!</span>
               </div>
             </div>
           )}

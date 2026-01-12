@@ -91,6 +91,10 @@ export default function AuthButton() {
 
             {showMenu && (
                 <div className="auth-menu">
+                    <a href="/links" className="auth-menu-item" style={{ display: 'block', width: '100%', textDecoration: 'none', textAlign: 'left' }}>
+                        My Links
+                    </a>
+                    <div style={{ height: '1px', background: 'var(--border-dark)', margin: '4px 0' }}></div>
                     <button onClick={handleLogout} className="auth-menu-item">
                         Sign Out
                     </button>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCode } from '@/lib/code-generator';
-import { createLink, codeExists } from '@/lib/db';
+import { createLink, codeExists, getLinkByUserAndUrl } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
     try {
@@ -23,6 +23,25 @@ export async function POST(request: NextRequest) {
                 { error: 'Invalid URL format' },
                 { status: 400 }
             );
+        }
+
+        // Check if link already exists for this user
+        // This prevents duplicate entries and keeps the dashboard clean
+        if (userId) {
+            const existingLink = await getLinkByUserAndUrl(userId, url);
+            if (existingLink) {
+                const host = request.headers.get('host') || 'localhost:3000';
+                const protocol = request.headers.get('x-forwarded-proto') || 'http';
+                const shortUrl = `${protocol}://${host}/r/${existingLink.short_code}`;
+
+                return NextResponse.json({
+                    code: existingLink.short_code,
+                    shortUrl,
+                    originalUrl: existingLink.original_url,
+                    createdAt: existingLink.created_at,
+                    isExisting: true
+                });
+            }
         }
 
         // Generate unique code (retry if collision)

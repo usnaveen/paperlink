@@ -108,6 +108,42 @@ export async function codeExists(shortCode: string): Promise<boolean> {
 }
 
 /**
+ * Find an existing link for a user and URL to prevent duplicates
+ */
+export async function getLinkByUserAndUrl(userId: string | undefined, url: string): Promise<Link | undefined> {
+    if (supabase) {
+        let query = supabase
+            .from('links')
+            .select('*')
+            .eq('original_url', url);
+
+        if (userId) {
+            query = query.eq('user_id', userId);
+        } else {
+            // For anonymous users, arguably we should not return duplicates 
+            // OR we check for links with NULL user_id?
+            // For now, let's only deduplicate for logged-in users to respect privacy
+            return undefined;
+        }
+
+        const { data, error } = await query.single();
+
+        if (error || !data) {
+            return undefined;
+        }
+
+        return data as Link;
+    }
+
+    // Fallback to in-memory (simple check)
+    if (!userId) return undefined;
+
+    return Array.from(memoryLinks.values()).find(
+        link => link.original_url === url && link.user_id === userId
+    );
+}
+
+/**
  * Increment click count and update last accessed time
  */
 export async function recordClick(shortCode: string): Promise<void> {

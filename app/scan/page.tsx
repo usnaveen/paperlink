@@ -243,8 +243,8 @@ export default function ScanPage() {
                     </div>
 
                     <nav className="nav-tabs">
-                        <Link href="/" className="nav-tab">✍️ Write</Link>
-                        <Link href="/scan" className="nav-tab active">📷 Scan</Link>
+                        <Link href="/" className="nav-tab">Write</Link>
+                        <Link href="/scan" className="nav-tab active">Scan</Link>
                     </nav>
 
                     <main className="scanner-container">
@@ -369,7 +369,8 @@ export default function ScanPage() {
                                         height: '100%',
                                         top: 0,
                                         left: 0,
-                                        cursor: 'text'
+                                        caretColor: 'transparent',
+                                        cursor: 'default'
                                     }}
                                     autoComplete="off"
                                     autoCorrect="off"
