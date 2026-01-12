@@ -306,33 +306,41 @@ export default function LinksPage() {
         <div className="container">
             <div className="winamp-window">
                 <div className="winamp-titlebar">
-                    <span className="winamp-titlebar-text">MY LINKS</span>
+                    <span className="winamp-titlebar-text">PAPERLINK</span>
                     <AuthButton />
                 </div>
 
                 <div className="winamp-content">
-                    {/* Dot Matrix Header */}
+                    {/* Dot Matrix Header - Functional Style */}
                     <div style={{
                         background: LCD_THEME.bg,
-                        backgroundImage: `radial-gradient(circle, ${LCD_THEME.dotInactive} 1.5px, transparent 2px)`,
-                        backgroundSize: '6px 6px',
-                        borderRadius: '4px',
-                        border: '2px solid rgba(0,0,0,0.3)',
-                        boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
-                        padding: '16px',
+                        borderRadius: '6px',
+                        border: '3px solid rgba(0,0,0,0.4)',
+                        boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
+                        padding: '16px 20px',
                         marginBottom: '12px',
-                        textAlign: 'center'
+                        position: 'relative',
+                        overflow: 'hidden'
                     }}>
-                        <span style={{
-                            fontFamily: 'var(--font-doto)',
+                        <div style={{
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundImage: `radial-gradient(circle, ${LCD_THEME.dotInactive} 1px, transparent 1px)`,
+                            backgroundSize: '4px 4px',
+                            opacity: 0.8
+                        }} />
+                        <div style={{
+                            position: 'relative',
+                            fontFamily: '"Doto", monospace',
                             fontSize: '16px',
-                            fontWeight: 700,
+                            fontWeight: 900,
                             color: LCD_THEME.dotActive,
                             textShadow: LCD_THEME.glow,
-                            letterSpacing: '1px'
+                            textAlign: 'center',
+                            letterSpacing: '2px'
                         }}>
                             YOUR SAVED LINKS
-                        </span>
+                        </div>
                     </div>
 
                     {/* Navigation */}

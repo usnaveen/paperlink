@@ -20,6 +20,21 @@ const CODE_THEME = {
   glow: '0 0 12px #00ff00, 0 0 4px #00ff00'
 };
 
+// Nav button themes
+const GREEN_NAV = {
+  bg: '#001100',
+  dotInactive: 'rgba(0, 255, 0, 0.15)',
+  dotActive: '#00ff00',
+  glow: '0 0 8px #00ff00'
+};
+
+const YELLOW_NAV = {
+  bg: '#111100',
+  dotInactive: 'rgba(255, 204, 0, 0.15)',
+  dotActive: '#ffcc00',
+  glow: '0 0 8px #ffcc00'
+};
+
 export default function Home() {
   const [url, setUrl] = useState('');
   const [code, setCode] = useState('');
@@ -96,7 +111,7 @@ export default function Home() {
     }
   };
 
-  // Functional Dot Matrix Display - dots that "light up" for text
+  // Functional Dot Matrix Display
   const DotMatrixDisplay = ({ text, theme, fontSize = '16px', bold = false }: {
     text: string,
     theme: typeof LCD_THEME,
@@ -112,18 +127,13 @@ export default function Home() {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {/* Base dot grid layer - always visible as "off" dots */}
       <div style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        top: 0, left: 0, right: 0, bottom: 0,
         backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1px, transparent 1px)`,
         backgroundSize: '4px 4px',
         opacity: 0.8
       }} />
-      {/* Text layer - appears as "lit up" dots */}
       <div style={{
         position: 'relative',
         fontFamily: '"Doto", monospace',
@@ -133,14 +143,7 @@ export default function Home() {
         textShadow: theme.glow,
         textAlign: 'center',
         letterSpacing: '2px',
-        whiteSpace: 'nowrap',
-        // Create dot-like appearance for text
-        backgroundImage: `radial-gradient(circle, ${theme.dotActive} 1.5px, transparent 1.5px)`,
-        backgroundSize: '4px 4px',
-        WebkitBackgroundClip: 'text',
-        backgroundClip: 'text',
-        // Keep color for glow effect
-        WebkitTextFillColor: theme.dotActive
+        whiteSpace: 'nowrap'
       }}>
         {text}
       </div>
@@ -155,9 +158,7 @@ export default function Home() {
                     0%, 100% { opacity: 1; filter: brightness(1); }
                     50% { opacity: 0.9; filter: brightness(1.3); }
                 }
-                .glitter-code {
-                    animation: glitter 1.2s ease-in-out infinite;
-                }
+                .glitter-code { animation: glitter 1.2s ease-in-out infinite; }
             `}</style>
       <div
         className="glitter-code"
@@ -173,7 +174,6 @@ export default function Home() {
         onClick={copyCode}
         title="Click to copy"
       >
-        {/* Base dot grid */}
         <div style={{
           position: 'absolute',
           top: 0, left: 0, right: 0, bottom: 0,
@@ -181,7 +181,6 @@ export default function Home() {
           backgroundSize: '4px 4px',
           opacity: 0.8
         }} />
-        {/* Code text */}
         <div style={{
           position: 'relative',
           fontFamily: '"Doto", monospace',
@@ -198,6 +197,54 @@ export default function Home() {
     </>
   );
 
+  // Matrix Nav Button
+  const MatrixNavButton = ({ href, label, theme, isActive }: {
+    href: string,
+    label: string,
+    theme: typeof GREEN_NAV,
+    isActive: boolean
+  }) => (
+    <Link
+      href={href}
+      style={{
+        flex: 1,
+        background: theme.bg,
+        borderRadius: '4px',
+        border: '2px solid rgba(0,0,0,0.4)',
+        boxShadow: isActive
+          ? `inset 0 2px 8px rgba(0,0,0,0.6), 0 0 15px ${theme.dotActive}40`
+          : 'inset 0 2px 8px rgba(0,0,0,0.6)',
+        padding: '14px 20px',
+        position: 'relative',
+        overflow: 'hidden',
+        textDecoration: 'none',
+        display: 'block',
+        textAlign: 'center',
+        opacity: isActive ? 1 : 0.5
+      }}
+    >
+      <div style={{
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1px, transparent 1px)`,
+        backgroundSize: '4px 4px',
+        opacity: isActive ? 0.8 : 0.3
+      }} />
+      <div style={{
+        position: 'relative',
+        fontFamily: '"Doto", monospace',
+        fontSize: '14px',
+        fontWeight: 900,
+        color: isActive ? theme.dotActive : '#444',
+        textShadow: isActive ? theme.glow : 'none',
+        letterSpacing: '2px',
+        textTransform: 'uppercase'
+      }}>
+        {label}
+      </div>
+    </Link>
+  );
+
   return (
     <div className="container" style={{
       display: 'flex',
@@ -206,14 +253,12 @@ export default function Home() {
       justifyContent: 'center'
     }}>
       <div className="winamp-window">
-        {/* Title Bar */}
         <div className="winamp-titlebar">
           <span className="winamp-titlebar-text">PAPERLINK</span>
           <AuthButton />
         </div>
 
         <div className="winamp-content">
-          {/* Dot Matrix Header - Single Line, Bold */}
           <DotMatrixDisplay
             text="BRIDGE PAPER NOTES TO DIGITAL"
             theme={LCD_THEME}
@@ -221,7 +266,6 @@ export default function Home() {
             bold={true}
           />
 
-          {/* URL Input */}
           <div className="card">
             <h2 className="card-title">▶ Shorten URL</h2>
             <form onSubmit={handleSubmit}>
@@ -268,7 +312,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Collapsible How It Works - No border when closed */}
+          {/* Collapsible How It Works */}
           {!code && (
             <div className={howItWorksOpen ? 'card' : ''} style={{ marginTop: '12px' }}>
               <h2
@@ -278,7 +322,7 @@ export default function Home() {
                   cursor: 'pointer',
                   userSelect: 'none',
                   margin: 0,
-                  color: '#b8c0cc',
+                  color: howItWorksOpen ? '#2a3555' : '#b8c0cc',
                   fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
@@ -315,15 +359,14 @@ export default function Home() {
             </div>
           )}
 
-          {/* Navigation Tabs */}
-          <nav className="nav-tabs" style={{ marginTop: '12px' }}>
-            <Link href="/" className="nav-tab active">Write</Link>
-            <Link href="/scan" className="nav-tab">Scan</Link>
-          </nav>
+          {/* Matrix Style Navigation */}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            <MatrixNavButton href="/" label="Write" theme={GREEN_NAV} isActive={true} />
+            <MatrixNavButton href="/scan" label="Scan" theme={YELLOW_NAV} isActive={false} />
+          </div>
         </div>
       </div>
 
-      {/* Version */}
       <div style={{
         textAlign: 'center',
         padding: '8px',
@@ -332,7 +375,7 @@ export default function Home() {
         fontFamily: 'monospace',
         marginTop: '16px'
       }}>
-        v0.3.0
+        v0.3.1
       </div>
     </div>
   );

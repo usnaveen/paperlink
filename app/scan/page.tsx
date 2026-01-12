@@ -8,6 +8,21 @@ import Image from 'next/image';
 type ScanStatus = 'idle' | 'initializing' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'not-found' | 'fuzzy-match' | 'error';
 type CodeState = 'empty' | 'scanning' | 'found' | 'not-found' | 'fuzzy';
 
+// Nav button themes
+const GREEN_NAV = {
+    bg: '#001100',
+    dotInactive: 'rgba(0, 255, 0, 0.15)',
+    dotActive: '#00ff00',
+    glow: '0 0 8px #00ff00'
+};
+
+const YELLOW_NAV = {
+    bg: '#111100',
+    dotInactive: 'rgba(255, 204, 0, 0.15)',
+    dotActive: '#ffcc00',
+    glow: '0 0 8px #ffcc00'
+};
+
 export default function ScanPage() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +47,6 @@ export default function ScanPage() {
     const codePattern = /PL-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}-[23456789ACDEFGHJKLMNPQRTUVWXY]{3}/gi;
     const validChars = '23456789ACDEFGHJKLMNPQRTUVWXY';
 
-    // Theme Constants
     const LCD_THEME = {
         bg: '#0055aa',
         dotInactive: 'rgba(255, 255, 255, 0.15)',
@@ -40,7 +54,6 @@ export default function ScanPage() {
         glow: '0 0 8px #ffffff, 0 0 2px #ffffff'
     };
 
-    // Color themes for code states
     const getCodeTheme = (state: CodeState) => {
         switch (state) {
             case 'found':
@@ -54,16 +67,13 @@ export default function ScanPage() {
         }
     };
 
-    // Rotary animation for code display
     const animateCodeDisplay = async (code: string, finalState: CodeState) => {
         setIsAnimating(true);
         const chars = 'ABCDEFGHJKLMNPQRTUVWXY23456789';
 
         for (let pos = 0; pos < code.length; pos++) {
             const targetChar = code[pos];
-            if (targetChar === '-' || targetChar === 'P' || targetChar === 'L') {
-                continue;
-            }
+            if (targetChar === '-' || targetChar === 'P' || targetChar === 'L') continue;
 
             for (let i = 0; i < 5; i++) {
                 const randomChar = chars[Math.floor(Math.random() * chars.length)];
@@ -72,7 +82,6 @@ export default function ScanPage() {
                 setDisplayCode(displayChars.join(''));
                 await new Promise(r => setTimeout(r, 50));
             }
-
             setDisplayCode(code.slice(0, pos + 1) + code.slice(pos + 1));
         }
 
@@ -87,9 +96,7 @@ export default function ScanPage() {
         if (!track) return;
 
         try {
-            await track.applyConstraints({
-                advanced: [{ torch: !flashOn }] as any
-            });
+            await track.applyConstraints({ advanced: [{ torch: !flashOn }] as any });
             setFlashOn(!flashOn);
         } catch (err) {
             console.error('Flash error:', err);
@@ -102,17 +109,10 @@ export default function ScanPage() {
 
         for (let i = 0; i < data.length; i += 4) {
             const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-
             if (gray < 100) {
-                data[i] = 0;
-                data[i + 1] = 255;
-                data[i + 2] = 204;
-                data[i + 3] = 255;
+                data[i] = 0; data[i + 1] = 255; data[i + 2] = 204; data[i + 3] = 255;
             } else {
-                data[i] = 31;
-                data[i + 1] = 54;
-                data[i + 2] = 153;
-                data[i + 3] = 255;
+                data[i] = 31; data[i + 1] = 54; data[i + 2] = 153; data[i + 3] = 255;
             }
         }
         ctx.putImageData(imageData, 0, 0);
@@ -124,6 +124,7 @@ export default function ScanPage() {
             streamRef.current = null;
         }
         setIsVideoReady(false);
+        setFlashOn(false);
     }, []);
 
     const resetToInitial = useCallback(() => {
@@ -138,19 +139,14 @@ export default function ScanPage() {
         setManualCodeChars('');
     }, [stopCamera]);
 
-    // Reset when page loads (handles back navigation)
     useEffect(() => {
         resetToInitial();
-
         return () => {
             stopCamera();
-            if (workerRef.current) {
-                workerRef.current.terminate().catch(() => { });
-            }
+            if (workerRef.current) workerRef.current.terminate().catch(() => { });
         };
     }, [stopCamera, resetToInitial]);
 
-    // Handle detected code with color states
     const handleCodeDetected = async (code: string, isFuzzyMatch = false, originalCode?: string) => {
         setDetectedCode(code);
         setManualCodeChars(code.replace(/PL-|-/g, ''));
@@ -166,9 +162,7 @@ export default function ScanPage() {
             await animateCodeDisplay(code, 'scanning');
         }
 
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate([100, 50, 100]);
-        }
+        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
         try {
             const response = await fetch(`/api/resolve/${encodeURIComponent(code)}`);
@@ -206,14 +200,10 @@ export default function ScanPage() {
                 for (let i = 0; i < 6; i++) {
                     if (scannedChars[i] !== dbChars[i]) diff++;
                 }
-                if (diff === 1) {
-                    return { match: dbCode, original: scannedCode };
-                }
+                if (diff === 1) return { match: dbCode, original: scannedCode };
             }
             return null;
-        } catch {
-            return null;
-        }
+        } catch { return null; }
     };
 
     const captureAndProcess = async () => {
@@ -221,13 +211,8 @@ export default function ScanPage() {
         const canvas = canvasRef.current;
         const overlay = overlayRef.current;
 
-        if (!video || !canvas || !workerRef.current || !overlay) {
-            return;
-        }
-
-        if (!isVideoReady || video.videoWidth === 0 || video.videoHeight === 0) {
-            return;
-        }
+        if (!video || !canvas || !workerRef.current || !overlay) return;
+        if (!isVideoReady || video.videoWidth === 0 || video.videoHeight === 0) return;
 
         setStatus('capturing');
         setCodeState('scanning');
@@ -236,8 +221,9 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not get canvas context');
 
-            const containerWidth = overlay.clientWidth;
-            const containerHeight = overlay.clientHeight;
+            // Viewfinder is 280x90, video has scale(1.5)
+            const containerWidth = overlay.clientWidth;  // 280
+            const containerHeight = overlay.clientHeight; // 90
             const cssScale = 1.5;
             const videoWidth = video.videoWidth;
             const videoHeight = video.videoHeight;
@@ -267,6 +253,7 @@ export default function ScanPage() {
             canvas.height = sourceH;
             ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
 
+            // OCR preprocessing
             const ocrCanvas = document.createElement('canvas');
             const ocrHeight = 60;
             const ocrWidth = sourceW * (ocrHeight / sourceH);
@@ -282,6 +269,7 @@ export default function ScanPage() {
 
             const ocrImage = preprocessImage(ocrCanvas.width > 0 ? ocrCanvas : canvas);
 
+            // Display image
             ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
             applyDigitalTheme(ctx, sourceW, sourceH);
             const displayImage = canvas.toDataURL('image/png');
@@ -296,17 +284,13 @@ export default function ScanPage() {
 
             if (matches && matches.length > 0) {
                 const scannedCode = matches[0].toUpperCase();
-
                 const exactResponse = await fetch(`/api/resolve/${encodeURIComponent(scannedCode)}`);
                 if (exactResponse.ok) {
                     handleCodeDetected(scannedCode);
                 } else {
                     const fuzzy = await findFuzzyMatch(scannedCode);
-                    if (fuzzy) {
-                        handleCodeDetected(fuzzy.match, true, fuzzy.original);
-                    } else {
-                        handleCodeDetected(scannedCode);
-                    }
+                    if (fuzzy) handleCodeDetected(fuzzy.match, true, fuzzy.original);
+                    else handleCodeDetected(scannedCode);
                 }
             } else {
                 setCodeState('not-found');
@@ -319,9 +303,7 @@ export default function ScanPage() {
         }
     };
 
-    const handleVideoCanPlay = () => {
-        setIsVideoReady(true);
-    };
+    const handleVideoCanPlay = () => setIsVideoReady(true);
 
     const startCamera = async () => {
         try {
@@ -332,16 +314,10 @@ export default function ScanPage() {
             setFlashOn(false);
             setCodeState('empty');
 
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera not supported');
-            }
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Camera not supported');
 
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                },
+                video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
             });
             streamRef.current = stream;
 
@@ -384,10 +360,7 @@ export default function ScanPage() {
 
         let min = 255, max = 0;
         for (let i = 0; i < width * height; i++) {
-            const r = data[i * 4];
-            const g = data[i * 4 + 1];
-            const b = data[i * 4 + 2];
-            const gray = (r * 299 + g * 587 + b * 114) / 1000;
+            const gray = (data[i * 4] * 299 + data[i * 4 + 1] * 587 + data[i * 4 + 2] * 114) / 1000;
             grayData[i] = gray;
             if (gray < min) min = gray;
             if (gray > max) max = gray;
@@ -404,11 +377,7 @@ export default function ScanPage() {
             let sum = 0;
             for (let x = 0; x < width; x++) {
                 sum += grayData[y * width + x];
-                if (y === 0) {
-                    integral[y * width + x] = sum;
-                } else {
-                    integral[y * width + x] = integral[(y - 1) * width + x] + sum;
-                }
+                integral[y * width + x] = y === 0 ? sum : integral[(y - 1) * width + x] + sum;
             }
         }
 
@@ -446,23 +415,9 @@ export default function ScanPage() {
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         const key = e.key.toUpperCase();
-
-        if (e.key === 'Backspace') {
-            setManualCodeChars(prev => prev.slice(0, -1));
-            e.preventDefault();
-            return;
-        }
-
-        if (e.key === 'Enter' && manualCodeChars.length === 6) {
-            handleManualSubmit();
-            e.preventDefault();
-            return;
-        }
-
-        if (validChars.includes(key) && manualCodeChars.length < 6) {
-            setManualCodeChars(prev => prev + key);
-            e.preventDefault();
-        }
+        if (e.key === 'Backspace') { setManualCodeChars(prev => prev.slice(0, -1)); e.preventDefault(); return; }
+        if (e.key === 'Enter' && manualCodeChars.length === 6) { handleManualSubmit(); e.preventDefault(); return; }
+        if (validChars.includes(key) && manualCodeChars.length < 6) { setManualCodeChars(prev => prev + key); e.preventDefault(); }
     };
 
     const handleManualSubmit = async () => {
@@ -481,9 +436,8 @@ export default function ScanPage() {
     const cameraActive = showCamera && isVideoReady;
     const theme = getCodeTheme(codeState);
 
-    // Functional Dot Matrix Display Component
-    const DotMatrixDisplay = ({ text, bgColor, textColor, glow, fontSize = '16px' }: {
-        text: string, bgColor: string, textColor: string, glow: string, fontSize?: string
+    const DotMatrixDisplay = ({ text, bgColor, textColor, glow, fontSize = '16px', bold = false }: {
+        text: string, bgColor: string, textColor: string, glow: string, fontSize?: string, bold?: boolean
     }) => (
         <div style={{
             background: bgColor,
@@ -495,36 +449,63 @@ export default function ScanPage() {
             overflow: 'hidden'
         }}>
             <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                 backgroundImage: `radial-gradient(circle, ${textColor}22 1px, transparent 1px)`,
-                backgroundSize: '4px 4px',
-                opacity: 0.8
+                backgroundSize: '4px 4px', opacity: 0.8
             }} />
             <div style={{
                 position: 'relative',
                 fontFamily: '"Doto", monospace',
                 fontSize: fontSize,
-                fontWeight: 900,
+                fontWeight: bold ? 900 : 700,
                 color: textColor,
                 textShadow: glow,
                 textAlign: 'center',
                 letterSpacing: '2px',
                 whiteSpace: 'nowrap'
-            }}>
-                {text}
-            </div>
+            }}>{text}</div>
         </div>
+    );
+
+    const MatrixNavButton = ({ href, label, navTheme, isActive }: {
+        href: string, label: string, navTheme: typeof GREEN_NAV, isActive: boolean
+    }) => (
+        <Link href={href} style={{
+            flex: 1,
+            background: navTheme.bg,
+            borderRadius: '4px',
+            border: '2px solid rgba(0,0,0,0.4)',
+            boxShadow: isActive ? `inset 0 2px 8px rgba(0,0,0,0.6), 0 0 15px ${navTheme.dotActive}40` : 'inset 0 2px 8px rgba(0,0,0,0.6)',
+            padding: '14px 20px',
+            position: 'relative',
+            overflow: 'hidden',
+            textDecoration: 'none',
+            display: 'block',
+            textAlign: 'center',
+            opacity: isActive ? 1 : 0.5
+        }}>
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundImage: `radial-gradient(circle, ${navTheme.dotInactive} 1px, transparent 1px)`,
+                backgroundSize: '4px 4px', opacity: isActive ? 0.8 : 0.3
+            }} />
+            <div style={{
+                position: 'relative',
+                fontFamily: '"Doto", monospace',
+                fontSize: '14px',
+                fontWeight: 900,
+                color: isActive ? navTheme.dotActive : '#444',
+                textShadow: isActive ? navTheme.glow : 'none',
+                letterSpacing: '2px',
+                textTransform: 'uppercase'
+            }}>{label}</div>
+        </Link>
     );
 
     return (
         <div className="container">
-            {/* CSS Animations */}
             <style>{`
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.6; }
-                }
+                @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
                 .led-on { animation: pulse 1s ease-in-out infinite; }
             `}</style>
 
@@ -535,57 +516,31 @@ export default function ScanPage() {
                 </div>
 
                 <div className="winamp-content">
-                    {/* Dot Matrix Header */}
                     <DotMatrixDisplay
                         text="SCAN YOUR HANDWRITTEN CODES"
                         bgColor={LCD_THEME.bg}
                         textColor={LCD_THEME.dotActive}
                         glow={LCD_THEME.glow}
                         fontSize="14px"
+                        bold={true}
                     />
 
                     <main className="scanner-container">
-                        {/* Camera Box - Always visible with viewfinder/placeholder */}
                         <div className="card">
                             <h2 className="card-title">▶ Camera</h2>
 
-                            {/* LED Indicators - Always visible */}
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <div style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        borderRadius: '50%',
-                                        background: cameraActive ? '#00ff00' : '#333',
-                                        boxShadow: cameraActive ? '0 0 8px #00ff00' : 'none',
-                                        border: '1px solid #555'
-                                    }} className={cameraActive ? 'led-on' : ''} />
-                                    <span style={{ fontSize: '10px', color: '#888' }}>CAM</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <div style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        borderRadius: '50%',
-                                        background: flashOn ? '#ffcc00' : '#333',
-                                        boxShadow: flashOn ? '0 0 8px #ffcc00' : 'none',
-                                        border: '1px solid #555'
-                                    }} className={flashOn ? 'led-on' : ''} />
-                                    <span style={{ fontSize: '10px', color: '#888' }}>FLASH</span>
-                                </div>
-                            </div>
-
-                            {/* Viewfinder Box */}
+                            {/* Viewfinder - Fixed 280x90 */}
                             <div
                                 ref={overlayRef}
                                 style={{
-                                    width: '100%',
-                                    height: '100px',
+                                    width: '280px',
+                                    height: '90px',
+                                    margin: '0 auto',
                                     border: '2px solid #00ffcc',
                                     position: 'relative',
                                     overflow: 'hidden',
                                     borderRadius: '4px',
-                                    boxShadow: showCamera ? '0 0 15px rgba(0, 255, 204, 0.3)' : 'none',
+                                    boxShadow: cameraActive ? '0 0 15px rgba(0, 255, 204, 0.3)' : 'none',
                                     background: '#0a1a2e',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -593,19 +548,13 @@ export default function ScanPage() {
                                 }}
                             >
                                 {status === 'idle' && (
-                                    <span style={{
-                                        color: '#00ffcc',
-                                        fontSize: '12px',
-                                        textAlign: 'center',
-                                        padding: '10px',
-                                        opacity: 0.7
-                                    }}>
-                                        Point your camera at the handwritten code
+                                    <span style={{ color: '#00ffcc', fontSize: '11px', textAlign: 'center', padding: '10px', opacity: 0.7 }}>
+                                        Point camera at handwritten code
                                     </span>
                                 )}
 
                                 {status === 'error' && (
-                                    <span style={{ color: '#ff3333', fontSize: '12px' }}>{cameraError}</span>
+                                    <span style={{ color: '#ff3333', fontSize: '11px', textAlign: 'center', padding: '10px' }}>{cameraError}</span>
                                 )}
 
                                 {showCamera && !capturedImage && (
@@ -615,22 +564,14 @@ export default function ScanPage() {
                                             playsInline muted autoPlay
                                             onCanPlay={handleVideoCanPlay}
                                             style={{
-                                                width: '100%',
-                                                height: '100%',
+                                                width: '100%', height: '100%',
                                                 objectFit: 'cover',
                                                 transform: 'scale(1.5)',
                                                 transformOrigin: 'center center'
                                             }}
                                         />
                                         {status === 'initializing' && (
-                                            <div style={{
-                                                position: 'absolute',
-                                                top: 0, left: 0, right: 0, bottom: 0,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                background: 'rgba(0,0,0,0.8)'
-                                            }}>
+                                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)' }}>
                                                 <span className="spinner"></span>
                                             </div>
                                         )}
@@ -638,38 +579,43 @@ export default function ScanPage() {
                                 )}
 
                                 {capturedImage && (
-                                    <img
-                                        src={capturedImage}
-                                        alt="Captured"
-                                        style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'fill',
-                                            imageRendering: 'pixelated'
-                                        }}
-                                    />
+                                    <img src={capturedImage} alt="Captured" style={{ width: '100%', height: '100%', objectFit: 'fill', imageRendering: 'pixelated' }} />
                                 )}
                             </div>
 
-                            {/* Camera Controls */}
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '16px',
-                                marginTop: '12px'
-                            }}>
-                                {/* Camera/Capture Button */}
+                            {/* Camera Controls - LEDs on left of camera button */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '12px' }}>
+                                {/* LED Indicators */}
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{
+                                            width: '8px', height: '8px', borderRadius: '50%',
+                                            background: cameraActive ? '#00ff00' : '#333',
+                                            boxShadow: cameraActive ? '0 0 6px #00ff00' : 'none',
+                                            border: '1px solid #555'
+                                        }} className={cameraActive ? 'led-on' : ''} />
+                                        <span style={{ fontSize: '9px', color: '#777' }}>CAM</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <div style={{
+                                            width: '8px', height: '8px', borderRadius: '50%',
+                                            background: flashOn ? '#ffcc00' : '#333',
+                                            boxShadow: flashOn ? '0 0 6px #ffcc00' : 'none',
+                                            border: '1px solid #555'
+                                        }} className={flashOn ? 'led-on' : ''} />
+                                        <span style={{ fontSize: '9px', color: '#777' }}>FLS</span>
+                                    </div>
+                                </div>
+
+                                {/* Camera Button */}
                                 <button
                                     onClick={showCamera ? captureAndProcess : startCamera}
                                     disabled={showCamera && !isVideoReady}
                                     style={{
-                                        background: (showCamera && !isVideoReady)
-                                            ? '#666'
-                                            : 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)',
+                                        background: (showCamera && !isVideoReady) ? '#666' : 'linear-gradient(180deg, #e8e8e8 0%, #c8c8c8 100%)',
                                         border: '1px solid #999',
                                         borderRadius: '30px',
-                                        padding: '12px 40px',
+                                        padding: '10px 36px',
                                         cursor: (showCamera && !isVideoReady) ? 'not-allowed' : 'pointer',
                                         display: 'inline-flex',
                                         alignItems: 'center',
@@ -677,40 +623,26 @@ export default function ScanPage() {
                                         boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.8)'
                                     }}
                                 >
-                                    <Image
-                                        src="/camera.svg"
-                                        alt="Camera"
-                                        width={24}
-                                        height={24}
-                                        style={{ opacity: (showCamera && !isVideoReady) ? 0.3 : 0.7 }}
-                                    />
+                                    <Image src="/camera.svg" alt="Camera" width={22} height={22} style={{ opacity: (showCamera && !isVideoReady) ? 0.3 : 0.7 }} />
                                 </button>
 
                                 {/* Flash Button */}
-                                {hasFlash && showCamera && (
+                                {hasFlash && (
                                     <button
                                         onClick={toggleFlash}
                                         style={{
-                                            background: flashOn
-                                                ? 'linear-gradient(180deg, #ffee00 0%, #ffcc00 100%)'
-                                                : 'linear-gradient(180deg, #555 0%, #333 100%)',
+                                            background: flashOn ? 'linear-gradient(180deg, #ffee00 0%, #ffcc00 100%)' : 'linear-gradient(180deg, #555 0%, #333 100%)',
                                             border: '1px solid #666',
                                             borderRadius: '50%',
-                                            width: '40px',
-                                            height: '40px',
+                                            width: '36px',
+                                            height: '36px',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center'
                                         }}
                                     >
-                                        <Image
-                                            src="/flash.png"
-                                            alt="Flash"
-                                            width={20}
-                                            height={20}
-                                            style={{ opacity: flashOn ? 1 : 0.5 }}
-                                        />
+                                        <Image src="/flash.png" alt="Flash" width={18} height={18} style={{ opacity: flashOn ? 1 : 0.5 }} />
                                     </button>
                                 )}
                             </div>
@@ -718,7 +650,7 @@ export default function ScanPage() {
 
                         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                        {/* Code Display with Dynamic Color */}
+                        {/* Code Display */}
                         <div className="card">
                             <h2 className="card-title">▶ Code Display</h2>
                             <div style={{ position: 'relative' }}>
@@ -737,8 +669,7 @@ export default function ScanPage() {
                                     }}
                                 >
                                     <div style={{
-                                        position: 'absolute',
-                                        top: 0, left: 0, right: 0, bottom: 0,
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                                         backgroundImage: `radial-gradient(circle, ${theme.dotActive}22 1px, transparent 1px)`,
                                         backgroundSize: '4px 4px'
                                     }} />
@@ -752,9 +683,7 @@ export default function ScanPage() {
                                         textAlign: 'center',
                                         letterSpacing: '4px',
                                         transition: 'color 0.3s ease'
-                                    }}>
-                                        {getFormattedDisplay()}
-                                    </div>
+                                    }}>{getFormattedDisplay()}</div>
                                 </div>
                                 <input
                                     ref={inputRef}
@@ -762,26 +691,14 @@ export default function ScanPage() {
                                     value=""
                                     onChange={() => { }}
                                     onKeyDown={handleKeyDown}
-                                    style={{
-                                        position: 'absolute',
-                                        opacity: 0,
-                                        width: '100%',
-                                        height: '100%',
-                                        top: 0,
-                                        left: 0
-                                    }}
+                                    style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0 }}
                                     autoComplete="off"
                                     autoCorrect="off"
                                     autoCapitalize="characters"
                                     disabled={isAnimating}
                                 />
                             </div>
-                            <p style={{
-                                marginTop: '8px',
-                                fontSize: '11px',
-                                color: '#888',
-                                textAlign: 'center'
-                            }}>
+                            <p style={{ marginTop: '8px', fontSize: '11px', color: '#888', textAlign: 'center' }}>
                                 {isAnimating ? 'Processing...' : 'Tap above to type manually'}
                             </p>
                             <button
@@ -794,23 +711,15 @@ export default function ScanPage() {
                             </button>
                         </div>
 
-                        {/* Navigation */}
-                        <nav className="nav-tabs" style={{ marginTop: '12px' }}>
-                            <Link href="/" className="nav-tab">Write</Link>
-                            <Link href="/scan" className="nav-tab active">Scan</Link>
-                        </nav>
+                        {/* Matrix Navigation */}
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                            <MatrixNavButton href="/" label="Write" navTheme={GREEN_NAV} isActive={false} />
+                            <MatrixNavButton href="/scan" label="Scan" navTheme={YELLOW_NAV} isActive={true} />
+                        </div>
                     </main>
                 </div>
             </div>
-            <div style={{
-                textAlign: 'center',
-                padding: '8px',
-                fontSize: '10px',
-                color: '#666',
-                fontFamily: 'monospace'
-            }}>
-                v0.3.1
-            </div>
+            <div style={{ textAlign: 'center', padding: '8px', fontSize: '10px', color: '#666', fontFamily: 'monospace' }}>v0.3.1</div>
         </div>
     );
 }
