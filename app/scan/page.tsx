@@ -458,6 +458,7 @@ export default function ScanPage() {
             border: '3px solid rgba(0,0,0,0.4)',
             boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
             padding: '16px 20px',
+            margin: '6px',
             position: 'relative',
             overflow: 'hidden'
         }}>
@@ -480,23 +481,34 @@ export default function ScanPage() {
         </div>
     );
 
+    // Matrix Nav Button - Consistent Box Style
     const MatrixNavButton = ({ href, label, navTheme, isActive }: {
         href: string, label: string, navTheme: typeof GREEN_NAV, isActive: boolean
     }) => (
         <Link href={href} style={{
             flex: 1,
             background: isActive ? navTheme.bg : navTheme.bgDim,
-            borderRadius: '4px',
-            border: '2px solid rgba(0,0,0,0.4)',
+            borderRadius: '6px',
+            border: '3px solid rgba(0,0,0,0.4)',
             boxShadow: isActive
-                ? `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 15px ${navTheme.bg}80`
-                : 'inset 0 2px 8px rgba(0,0,0,0.4)',
+                ? `inset 0 2px 8px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.1), 0 0 15px ${navTheme.bg}80`
+                : 'inset 0 2px 8px rgba(0,0,0,0.6)',
             padding: '14px 20px',
+            position: 'relative',
+            overflow: 'hidden',
             textDecoration: 'none',
             display: 'block',
             textAlign: 'center'
         }}>
             <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundImage: `radial-gradient(circle, ${isActive ? navTheme.textActive : navTheme.textInactive} 1px, transparent 1px)`,
+                backgroundSize: '4px 4px',
+                opacity: isActive ? 0.3 : 0.1
+            }} />
+            <div style={{
+                position: 'relative',
                 fontFamily: '"Doto", monospace',
                 fontSize: '14px',
                 fontWeight: 900,
@@ -718,7 +730,7 @@ export default function ScanPage() {
                         </div>
 
                         {/* Matrix Navigation */}
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', margin: '12px 6px 0 6px' }}>
                             <MatrixNavButton href="/" label="Write" navTheme={GREEN_NAV} isActive={false} />
                             <MatrixNavButton href="/scan" label="Scan" navTheme={YELLOW_NAV} isActive={true} />
                         </div>

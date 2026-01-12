@@ -318,7 +318,7 @@ export default function LinksPage() {
                         border: '3px solid rgba(0,0,0,0.4)',
                         boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.6)',
                         padding: '16px 20px',
-                        marginBottom: '12px',
+                        margin: '6px',
                         position: 'relative',
                         overflow: 'hidden'
                     }}>
@@ -344,9 +344,9 @@ export default function LinksPage() {
                     </div>
 
                     {/* Navigation */}
-                    <div style={{ marginBottom: '10px' }}>
-                        <Link href="/" className="btn btn-secondary" style={{ width: '100%' }}>
-                            ← Back to Home
+                    <div style={{ marginBottom: '10px', margin: '0 6px 10px 6px' }}>
+                        <Link href="/" className="btn btn-secondary" style={{ width: '100%', fontFamily: '"Doto", monospace', fontWeight: 700, letterSpacing: '1px' }}>
+                            ← BACK TO HOME
                         </Link>
                     </div>
 
