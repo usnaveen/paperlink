@@ -8,19 +8,21 @@ import Image from 'next/image';
 type ScanStatus = 'idle' | 'initializing' | 'camera-ready' | 'capturing' | 'processing' | 'detected' | 'not-found' | 'fuzzy-match' | 'error';
 type CodeState = 'empty' | 'scanning' | 'found' | 'not-found' | 'fuzzy';
 
-// Nav button themes
+// Nav button themes - Bright backgrounds with white text
 const GREEN_NAV = {
-    bg: '#001100',
-    dotInactive: 'rgba(0, 255, 0, 0.15)',
-    dotActive: '#00ff00',
-    glow: '0 0 8px #00ff00'
+    bg: '#00aa00',
+    bgDim: '#003300',
+    textActive: '#ffffff',
+    textInactive: '#88ff88',
+    glow: '0 0 12px #00ff00'
 };
 
 const YELLOW_NAV = {
-    bg: '#111100',
-    dotInactive: 'rgba(255, 204, 0, 0.15)',
-    dotActive: '#ffcc00',
-    glow: '0 0 8px #ffcc00'
+    bg: '#cc9900',
+    bgDim: '#443300',
+    textActive: '#ffffff',
+    textInactive: '#ffdd88',
+    glow: '0 0 12px #ffcc00'
 };
 
 export default function ScanPage() {
@@ -69,18 +71,20 @@ export default function ScanPage() {
 
     const animateCodeDisplay = async (code: string, finalState: CodeState) => {
         setIsAnimating(true);
+        setDisplayCode(code); // Show code immediately
         const chars = 'ABCDEFGHJKLMNPQRTUVWXY23456789';
 
+        // Faster animation - only 3 iterations, 25ms delay
         for (let pos = 0; pos < code.length; pos++) {
             const targetChar = code[pos];
             if (targetChar === '-' || targetChar === 'P' || targetChar === 'L') continue;
 
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 3; i++) {
                 const randomChar = chars[Math.floor(Math.random() * chars.length)];
                 const displayChars = code.split('');
                 displayChars[pos] = randomChar;
                 setDisplayCode(displayChars.join(''));
-                await new Promise(r => setTimeout(r, 50));
+                await new Promise(r => setTimeout(r, 25));
             }
             setDisplayCode(code.slice(0, pos + 1) + code.slice(pos + 1));
         }
@@ -152,12 +156,17 @@ export default function ScanPage() {
         setManualCodeChars(code.replace(/PL-|-/g, ''));
 
         if (isFuzzyMatch && originalCode) {
+            // Show original scanned code in RED first
             setDisplayCode(originalCode);
             setCodeState('not-found');
-            await new Promise(r => setTimeout(r, 800));
+            await new Promise(r => setTimeout(r, 600));
+
+            // Then animate to corrected code and turn YELLOW
             await animateCodeDisplay(code, 'fuzzy');
-            await new Promise(r => setTimeout(r, 500));
+            setCodeState('fuzzy');
+            await new Promise(r => setTimeout(r, 400));
         } else {
+            // Regular scan - animate the code
             setCodeState('scanning');
             await animateCodeDisplay(code, 'scanning');
         }
@@ -169,17 +178,21 @@ export default function ScanPage() {
             const data = await response.json();
 
             if (response.ok && data.url) {
+                // Found - turn GREEN
                 setCodeState('found');
                 setStatus('detected');
                 await new Promise(r => setTimeout(r, 400));
                 window.location.href = data.url;
             } else {
+                // Not found - show code in RED
+                setDisplayCode(code);
                 setCodeState('not-found');
                 setStatus('not-found');
                 setTimeout(() => resetToInitial(), 2000);
             }
         } catch (err) {
             console.error('Resolve error:', err);
+            setDisplayCode(code);
             setCodeState('not-found');
             setTimeout(() => resetToInitial(), 1500);
         }
@@ -472,29 +485,22 @@ export default function ScanPage() {
     }) => (
         <Link href={href} style={{
             flex: 1,
-            background: navTheme.bg,
+            background: isActive ? navTheme.bg : navTheme.bgDim,
             borderRadius: '4px',
             border: '2px solid rgba(0,0,0,0.4)',
-            boxShadow: isActive ? `inset 0 2px 8px rgba(0,0,0,0.6), 0 0 15px ${navTheme.dotActive}40` : 'inset 0 2px 8px rgba(0,0,0,0.6)',
+            boxShadow: isActive
+                ? `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 15px ${navTheme.bg}80`
+                : 'inset 0 2px 8px rgba(0,0,0,0.4)',
             padding: '14px 20px',
-            position: 'relative',
-            overflow: 'hidden',
             textDecoration: 'none',
             display: 'block',
-            textAlign: 'center',
-            opacity: isActive ? 1 : 0.5
+            textAlign: 'center'
         }}>
             <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                backgroundImage: `radial-gradient(circle, ${navTheme.dotInactive} 1px, transparent 1px)`,
-                backgroundSize: '4px 4px', opacity: isActive ? 0.8 : 0.3
-            }} />
-            <div style={{
-                position: 'relative',
                 fontFamily: '"Doto", monospace',
                 fontSize: '14px',
                 fontWeight: 900,
-                color: isActive ? navTheme.dotActive : '#444',
+                color: isActive ? navTheme.textActive : navTheme.textInactive,
                 textShadow: isActive ? navTheme.glow : 'none',
                 letterSpacing: '2px',
                 textTransform: 'uppercase'

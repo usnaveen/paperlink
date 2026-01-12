@@ -20,19 +20,21 @@ const CODE_THEME = {
   glow: '0 0 12px #00ff00, 0 0 4px #00ff00'
 };
 
-// Nav button themes
+// Nav button themes - Bright backgrounds with white text
 const GREEN_NAV = {
-  bg: '#001100',
-  dotInactive: 'rgba(0, 255, 0, 0.15)',
-  dotActive: '#00ff00',
-  glow: '0 0 8px #00ff00'
+  bg: '#00aa00',
+  bgDim: '#003300',
+  textActive: '#ffffff',
+  textInactive: '#88ff88',
+  glow: '0 0 12px #00ff00'
 };
 
 const YELLOW_NAV = {
-  bg: '#111100',
-  dotInactive: 'rgba(255, 204, 0, 0.15)',
-  dotActive: '#ffcc00',
-  glow: '0 0 8px #ffcc00'
+  bg: '#cc9900',
+  bgDim: '#443300',
+  textActive: '#ffffff',
+  textInactive: '#ffdd88',
+  glow: '0 0 12px #ffcc00'
 };
 
 export default function Home() {
@@ -197,7 +199,7 @@ export default function Home() {
     </>
   );
 
-  // Matrix Nav Button
+  // Matrix Nav Button - Bright style
   const MatrixNavButton = ({ href, label, theme, isActive }: {
     href: string,
     label: string,
@@ -208,34 +210,23 @@ export default function Home() {
       href={href}
       style={{
         flex: 1,
-        background: theme.bg,
+        background: isActive ? theme.bg : theme.bgDim,
         borderRadius: '4px',
         border: '2px solid rgba(0,0,0,0.4)',
         boxShadow: isActive
-          ? `inset 0 2px 8px rgba(0,0,0,0.6), 0 0 15px ${theme.dotActive}40`
-          : 'inset 0 2px 8px rgba(0,0,0,0.6)',
+          ? `inset 0 1px 0 rgba(255,255,255,0.3), 0 0 15px ${theme.bg}80`
+          : 'inset 0 2px 8px rgba(0,0,0,0.4)',
         padding: '14px 20px',
-        position: 'relative',
-        overflow: 'hidden',
         textDecoration: 'none',
         display: 'block',
-        textAlign: 'center',
-        opacity: isActive ? 1 : 0.5
+        textAlign: 'center'
       }}
     >
       <div style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundImage: `radial-gradient(circle, ${theme.dotInactive} 1px, transparent 1px)`,
-        backgroundSize: '4px 4px',
-        opacity: isActive ? 0.8 : 0.3
-      }} />
-      <div style={{
-        position: 'relative',
         fontFamily: '"Doto", monospace',
         fontSize: '14px',
         fontWeight: 900,
-        color: isActive ? theme.dotActive : '#444',
+        color: isActive ? theme.textActive : theme.textInactive,
         textShadow: isActive ? theme.glow : 'none',
         letterSpacing: '2px',
         textTransform: 'uppercase'
