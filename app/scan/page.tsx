@@ -153,66 +153,66 @@ export default function ScanPage() {
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not get canvas context');
 
-            // 1. Calculate the actual Rendered Dimensions of the video (cover fit)
-            const videoRatio = video.videoWidth / video.videoHeight;
-            const elementRatio = video.getBoundingClientRect().width / video.getBoundingClientRect().height; // Visual element size
+            // The video is displayed with:
+            // - objectFit: 'cover' (scales to fill container, may crop)
+            // - transform: 'scale(1.5)' (CSS zoom, does NOT affect getBoundingClientRect for the container)
+            // The overlay container IS the viewfinder (280x90).
 
-            let renderedWidth, renderedHeight;
-            let offsetX, offsetY;
+            // Container dimensions (the actual visible area)
+            const containerWidth = overlay.clientWidth;  // 280
+            const containerHeight = overlay.clientHeight; // 90
 
-            // Note: We use the video element's client dimensions as the "container"
-            const containerWidth = video.getBoundingClientRect().width;
-            const containerHeight = video.getBoundingClientRect().height;
+            // CSS scale factor applied to the video
+            const cssScale = 1.5;
 
-            if (videoRatio > elementRatio) {
-                // Video is wider than container: Covers height, crops width
-                renderedHeight = containerHeight;
-                renderedWidth = containerHeight * videoRatio;
-                offsetX = (renderedWidth - containerWidth) / 2;
-                offsetY = 0;
+            // The video source dimensions
+            const videoWidth = video.videoWidth;
+            const videoHeight = video.videoHeight;
+            const videoRatio = videoWidth / videoHeight;
+            const containerRatio = containerWidth / containerHeight;
+
+            // Figure out the "rendered" video dimensions BEFORE CSS scale
+            // (This is what object-fit: cover does internally)
+            let fittedWidth, fittedHeight;
+            if (videoRatio > containerRatio) {
+                // Video is wider - height fills container, width is cropped
+                fittedHeight = containerHeight;
+                fittedWidth = containerHeight * videoRatio;
             } else {
-                // Video is taller than container: Covers width, crops height
-                renderedWidth = containerWidth;
-                renderedHeight = containerWidth / videoRatio;
-                offsetX = 0;
-                offsetY = (renderedHeight - containerHeight) / 2;
+                // Video is taller - width fills container, height is cropped
+                fittedWidth = containerWidth;
+                fittedHeight = containerWidth / videoRatio;
             }
 
-            // 2. Map the Overlay (Box) visual coordinates to the Source Video coordinates
-            const overlayRect = overlay.getBoundingClientRect();
-            const videoRect = video.getBoundingClientRect(); // The DOM element
+            // After CSS scale(1.5), the video is further zoomed from center
+            // The visible portion is 1/1.5 of the scaled size, centered
+            const scaledWidth = fittedWidth * cssScale;
+            const scaledHeight = fittedHeight * cssScale;
 
-            // Where is the box relative to the DOM element top-left?
-            const boxVisualX = overlayRect.left - videoRect.left;
-            const boxVisualY = overlayRect.top - videoRect.top;
+            // The center of the scaled video aligns with center of container
+            // We see a (containerWidth x containerHeight) window into the center of the scaled video
+            const visibleLeft = (scaledWidth - containerWidth) / 2;
+            const visibleTop = (scaledHeight - containerHeight) / 2;
 
-            // Where is the box relative to the "Rendered Video" top-left? (Adding the cropped-out part)
-            const boxHereX = boxVisualX + offsetX;
-            const boxHereY = boxVisualY + offsetY;
+            // Map visible area back to source video coordinates
+            const sourceScale = videoWidth / scaledWidth;
+            const sourceX = visibleLeft * sourceScale;
+            const sourceY = visibleTop * sourceScale;
+            const sourceW = containerWidth * sourceScale;
+            const sourceH = containerHeight * sourceScale;
 
-            // Scale factor: Source Pixels per Rendered Pixel
-            const scale = video.videoWidth / renderedWidth;
-
-            const sourceX = boxHereX * scale;
-            const sourceY = boxHereY * scale;
-            const sourceW = overlayRect.width * scale;
-            const sourceH = overlayRect.height * scale;
-
-            // Set canvas size to the cropped size (High Res)
+            // Set canvas to capture resolution
             canvas.width = sourceW;
             canvas.height = sourceH;
 
-            // Draw original cropped image
+            // Draw the visible portion from source video
             ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
 
-            // 3. Process for OCR (Resize & Contrast)
-            // Tesseract works best when text height is roughly 20-30px.
-            // Our crop might be huge (e.g. 500px wide).
-            // Let's create a temporary smaller canvas for OCR
+            // Process for OCR: Create resized canvas with padding
             const ocrCanvas = document.createElement('canvas');
-            const ocrHeight = 60; // Target height for text line
+            const ocrHeight = 60;
             const ocrWidth = sourceW * (ocrHeight / sourceH);
-            ocrCanvas.width = ocrWidth + 40; // Add padding
+            ocrCanvas.width = ocrWidth + 40;
             ocrCanvas.height = ocrHeight + 40;
             const ocrCtx = ocrCanvas.getContext('2d');
 
@@ -224,8 +224,7 @@ export default function ScanPage() {
 
             const ocrImage = preprocessImage(ocrCanvas.width > 0 ? ocrCanvas : canvas);
 
-            // 4. Process for Display (Digitize Animation) - Use the visible canvas
-            // Re-draw clean image
+            // Process for Display (Digitize Animation)
             ctx.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
             applyDigitalTheme(ctx, sourceW, sourceH);
             const displayImage = canvas.toDataURL('image/png');
@@ -659,6 +658,15 @@ export default function ScanPage() {
                         </div>
                     </main>
                 </div>
+            </div>
+            <div style={{
+                textAlign: 'center',
+                padding: '8px',
+                fontSize: '10px',
+                color: '#666',
+                fontFamily: 'var(--font-label)'
+            }}>
+                v0.2.0
             </div>
         </div>
     );
