@@ -90,12 +90,30 @@ export default function AuthButton() {
             </button>
 
             {showMenu && (
-                <div className="auth-menu">
-                    <a href="/links" className="auth-menu-item" style={{ display: 'block', width: '100%', textDecoration: 'none', textAlign: 'left' }}>
+                <div className="auth-menu" style={{ padding: '6px' }}>
+                    <a
+                        href="/links"
+                        className="btn btn-secondary"
+                        style={{
+                            display: 'flex',
+                            width: '100%',
+                            textDecoration: 'none',
+                            textAlign: 'center',
+                            marginBottom: '6px',
+                            justifyContent: 'center',
+                            fontSize: '11px'
+                        }}
+                    >
                         My Links
                     </a>
-                    <div style={{ height: '1px', background: 'var(--border-dark)', margin: '4px 0' }}></div>
-                    <button onClick={handleLogout} className="auth-menu-item">
+                    <button
+                        onClick={() => {
+                            handleLogout();
+                            window.location.href = '/';
+                        }}
+                        className="btn btn-secondary"
+                        style={{ width: '100%', fontSize: '11px' }}
+                    >
                         Sign Out
                     </button>
                 </div>

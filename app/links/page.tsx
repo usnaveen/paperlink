@@ -14,13 +14,13 @@ interface UserLink {
 }
 
 // Swipeable Item Component
-function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelete: (id: number) => void, onCopy: (text: string) => void }) {
+function SwipeableLinkItem({ link, onDelete, onCopy, onEdit }: { link: UserLink, onDelete: (id: number) => void, onCopy: (text: string) => void, onEdit: (link: UserLink) => void }) {
     const [offset, setOffset] = useState(0);
     const startX = useRef<number | null>(null);
     const currentX = useRef<number>(0);
     const isDragging = useRef(false);
 
-    // Reset offset when scrolling
+    // Reset offset when scrolling/id changes
     useEffect(() => {
         setOffset(0);
         currentX.current = 0;
@@ -35,9 +35,8 @@ function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelet
         if (!startX.current || !isDragging.current) return;
         const diff = e.touches[0].clientX - startX.current;
 
-        // Only allow swiping left (negative diff)
-        // Max swipe items width approx 140px
-        const newOffset = Math.min(0, Math.max(-140, diff));
+        // Only allow swiping left. Width depends on buttons (3 buttons * ~60px = 180px)
+        const newOffset = Math.min(0, Math.max(-180, diff));
 
         setOffset(newOffset);
         currentX.current = newOffset;
@@ -47,9 +46,9 @@ function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelet
         isDragging.current = false;
         startX.current = null;
 
-        // Snap to state
-        if (currentX.current < -70) {
-            setOffset(-140); // Snap open
+        // Snap logic
+        if (currentX.current < -90) {
+            setOffset(-180); // Snap open
         } else {
             setOffset(0); // Snap closed
         }
@@ -63,7 +62,7 @@ function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelet
                 top: 0,
                 bottom: 0,
                 right: 0,
-                width: '140px',
+                width: '180px',
                 display: 'flex',
                 zIndex: 0
             }}>
@@ -72,29 +71,22 @@ function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelet
                         onCopy(`${window.location.origin}/r/${link.short_code}`);
                         setOffset(0);
                     }}
-                    style={{
-                        flex: 1,
-                        background: '#3366ff',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: 'bold'
-                    }}
+                    style={{ flex: 1, background: '#3366ff', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                 >
                     COPY
                 </button>
                 <button
-                    onClick={() => onDelete(link.id)}
-                    style={{
-                        flex: 1,
-                        background: '#cc3333',
-                        color: 'white',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: 'bold'
+                    onClick={() => {
+                        onEdit(link);
+                        setOffset(0);
                     }}
+                    style={{ flex: 1, background: '#ff9933', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+                >
+                    EDIT
+                </button>
+                <button
+                    onClick={() => onDelete(link.id)}
+                    style={{ flex: 1, background: '#cc3333', color: 'white', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
                 >
                     DELETE
                 </button>
@@ -104,12 +96,12 @@ function SwipeableLinkItem({ link, onDelete, onCopy }: { link: UserLink, onDelet
             <div
                 className="card"
                 style={{
-                    margin: 0, // Reset card margin
+                    margin: 0,
                     background: 'linear-gradient(180deg, var(--metal-mid) 0%, var(--metal-darker) 100%)',
                     zIndex: 1,
                     transform: `translateX(${offset}px)`,
                     transition: isDragging.current ? 'none' : 'transform 0.2s ease-out',
-                    touchAction: 'pan-y' // Allow vertical scroll, handle horizontal in JS
+                    touchAction: 'pan-y'
                 }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -158,6 +150,9 @@ export default function LinksPage() {
     const [links, setLinks] = useState<UserLink[]>([]);
     const [loading, setLoading] = useState(true);
     const [userId, setUserId] = useState<string | null>(null);
+    const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+    const [editingLink, setEditingLink] = useState<UserLink | null>(null);
+    const [editUrl, setEditUrl] = useState('');
 
     useEffect(() => {
         async function fetchLinks() {
@@ -177,19 +172,67 @@ export default function LinksPage() {
             setLoading(false);
         }
         fetchLinks();
+
+        // Redirect on logout
+        const { data: authListener } = supabase?.auth.onAuthStateChange((event) => {
+            if (event === 'SIGNED_OUT') window.location.href = '/';
+        }) || { data: { subscription: { unsubscribe: () => { } } } };
+
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
     }, []);
+
+    const showToast = (message: string, type: 'success' | 'error') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
 
     const handleDelete = async (id: number) => {
         if (!confirm('Delete this link?')) return;
         if (!supabase) return;
+
+        // Optimistic update
+        const originalLinks = [...links];
+        setLinks(links.filter(link => link.id !== id));
+
         const { error } = await supabase.from('links').delete().eq('id', id);
-        if (!error) setLinks(links.filter(link => link.id !== id));
+
+        if (error) {
+            console.error('Delete error', error);
+            setLinks(originalLinks);
+            showToast('Failed to delete. Check database permissions.', 'error');
+        } else {
+            showToast('Link deleted', 'success');
+        }
     };
 
     const handleCopy = (text: string) => {
         navigator.clipboard.writeText(text);
         if (navigator.vibrate) navigator.vibrate(50);
-        alert('Copied to clipboard!');
+        showToast('Copied to clipboard!', 'success');
+    };
+
+    const startEdit = (link: UserLink) => {
+        setEditingLink(link);
+        setEditUrl(link.original_url);
+    };
+
+    const saveEdit = async () => {
+        if (!editingLink || !supabase) return;
+
+        const { error } = await supabase
+            .from('links')
+            .update({ original_url: editUrl })
+            .eq('id', editingLink.id);
+
+        if (error) {
+            showToast('Failed to update link', 'error');
+        } else {
+            setLinks(links.map(l => l.id === editingLink.id ? { ...l, original_url: editUrl } : l));
+            showToast('Link updated successfully', 'success');
+            setEditingLink(null);
+        }
     };
 
     return (
@@ -201,10 +244,10 @@ export default function LinksPage() {
                 </div>
 
                 <div className="winamp-content">
-                    {/* Navigation bar removed as requested */}
+                    {/* Navigation */}
                     <div style={{ marginBottom: '10px' }}>
                         <Link href="/" className="btn btn-secondary" style={{ width: '100%' }}>
-                            ← Back to Dashboard
+                            🏠 HOME
                         </Link>
                     </div>
 
@@ -228,12 +271,47 @@ export default function LinksPage() {
                                     link={link}
                                     onDelete={handleDelete}
                                     onCopy={handleCopy}
+                                    onEdit={startEdit}
                                 />
                             ))}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Edit Modal */}
+            {editingLink && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.8)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div className="card" style={{ width: '90%', maxWidth: '350px' }}>
+                        <h2 className="card-title">EDIT LINK</h2>
+                        <div style={{ marginBottom: '10px' }}>
+                            <label style={{ fontSize: '11px', color: '#b8c0cc', display: 'block', marginBottom: '4px' }}>Destination URL:</label>
+                            <input
+                                type="url"
+                                className="input"
+                                value={editUrl}
+                                onChange={(e) => setEditUrl(e.target.value)}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={() => setEditingLink(null)} className="btn btn-secondary" style={{ flex: 1 }}>CANCEL</button>
+                            <button onClick={saveEdit} className="btn btn-primary" style={{ flex: 1 }}>SAVE</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`toast ${toast.type}`}>
+                    <span>{toast.type === 'success' ? '✓' : '❌'}</span>
+                    <span>{toast.message}</span>
+                </div>
+            )}
         </div>
     );
 }
