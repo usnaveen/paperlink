@@ -345,7 +345,7 @@ export default function LinksPage() {
 
                     {/* Navigation */}
                     <div style={{ marginBottom: '10px', margin: '0 6px 10px 6px' }}>
-                        <Link href="/" className="btn btn-secondary" style={{ width: '100%', fontFamily: '"Doto", monospace', fontWeight: 700, letterSpacing: '1px' }}>
+                        <Link href="/" className="btn btn-secondary" style={{ width: '100%', fontFamily: '"Doto", monospace', fontWeight: 900, letterSpacing: '1px' }}>
                             ← BACK TO HOME
                         </Link>
                     </div>

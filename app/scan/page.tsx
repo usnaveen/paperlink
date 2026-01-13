@@ -482,10 +482,10 @@ export default function ScanPage() {
     );
 
     // Matrix Nav Button - Consistent Box Style
-    const MatrixNavButton = ({ href, label, navTheme, isActive }: {
-        href: string, label: string, navTheme: typeof GREEN_NAV, isActive: boolean
+    const MatrixNavButton = ({ href, label, navTheme, isActive, onClick }: {
+        href: string, label: string, navTheme: typeof GREEN_NAV, isActive: boolean, onClick?: React.MouseEventHandler
     }) => (
-        <Link href={href} style={{
+        <Link href={href} onClick={onClick} style={{
             flex: 1,
             background: isActive ? navTheme.bg : navTheme.bgDim,
             borderRadius: '6px',
@@ -709,7 +709,8 @@ export default function ScanPage() {
                                     value=""
                                     onChange={() => { }}
                                     onKeyDown={handleKeyDown}
-                                    style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0 }}
+                                    onFocus={(e) => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                    style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, caretColor: 'transparent' }}
                                     autoComplete="off"
                                     autoCorrect="off"
                                     autoCapitalize="characters"
@@ -732,7 +733,16 @@ export default function ScanPage() {
                         {/* Matrix Navigation */}
                         <div style={{ display: 'flex', gap: '8px', marginTop: '12px', margin: '12px 6px 0 6px' }}>
                             <MatrixNavButton href="/" label="Write" navTheme={GREEN_NAV} isActive={false} />
-                            <MatrixNavButton href="/scan" label="Scan" navTheme={YELLOW_NAV} isActive={true} />
+                            <MatrixNavButton
+                                href="/scan"
+                                label="Scan"
+                                navTheme={YELLOW_NAV}
+                                isActive={true}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    resetToInitial();
+                                }}
+                            />
                         </div>
                     </main>
                 </div>
